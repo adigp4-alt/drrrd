@@ -85,7 +85,7 @@ docker run -d -p 80:5000 --restart always iran-tracker
 ```bash
 cd iran-tracker-web
 pip install -r requirements.txt
-python app.py
+python main.py
 ```
 Visit `http://localhost:5000`
 
@@ -95,7 +95,7 @@ Visit `http://localhost:5000`
 
 ```
 iran-tracker-web/
-├── app.py              ← Flask backend (fetches data, serves API)
+├── main.py             ← Flask backend (fetches data, serves API)
 ├── templates/
 │   └── index.html      ← Dashboard frontend (vanilla HTML/CSS/JS)
 ├── requirements.txt    ← Python dependencies
@@ -123,7 +123,7 @@ iran-tracker-web/
 └─────────────────────┼───────────────────────────────┘
                       │
 ┌─────────────────────┼───────────────────────────────┐
-│            FLASK SERVER (app.py)                      │
+│            FLASK SERVER (main.py)                      │
 │                     │                                 │
 │  ┌─────────────────┴──────────────────────────┐     │
 │  │         Background Scheduler                │     │
@@ -166,15 +166,15 @@ iran-tracker-web/
 
 ## ⚙️ Configuration
 
-**Change refresh interval:** In `app.py`, find:
+**Change refresh interval:** In `main.py`, find:
 ```python
 scheduler.add_job(fetch_prices, "interval", minutes=5, ...)
 ```
 Change `minutes=5` to your preferred interval.
 
-**Add/remove tickers:** Edit the `TIERS` dictionary in `app.py`.
+**Add/remove tickers:** Edit the `TIERS` dictionary in `main.py`.
 
-**Custom alerts threshold:** Change `abs(change) >= 5` in the `fetch_prices()` function.
+**Custom alerts threshold:** Change `abs(change) >= 5` in the `fetch_prices()` function in `main.py`.
 
 ---
 

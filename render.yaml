@@ -1,6 +1,6 @@
 version: "1"
 projects:
-- name: Iran Tracker
+- name: iran-tracker
   environments:
   - name: Production
     services:

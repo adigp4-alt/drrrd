@@ -91,6 +91,17 @@ for tid, tdata in TIERS.items():
 
 VOLATILE = {"AVAV", "ESLT", "VG", "BWET", "FRO", "INSW", "STNG", "DHT"}
 
+# Approximate baseline prices used when live data is unavailable
+DEMO_PRICES = {
+    "SLB": 44.0, "HAL": 36.0, "BKR": 38.0, "TTE": 62.0, "KBR": 74.0,
+    "FLR": 47.0, "ACM": 103.0, "CAT": 360.0,
+    "LMT": 468.0, "RTX": 124.0, "NOC": 480.0, "AVAV": 190.0, "ESLT": 205.0,
+    "XOM": 108.0, "CVX": 155.0, "COP": 115.0, "LNG": 210.0, "VG": 12.0,
+    "EIS": 54.0, "CHKP": 165.0, "WIX": 175.0, "TEVA": 19.0,
+    "CRWD": 380.0, "PANW": 185.0, "ZS": 195.0, "LDOS": 155.0, "CIBR": 30.0,
+    "BWET": 14.0, "FRO": 17.0, "INSW": 32.0, "STNG": 55.0, "DHT": 11.0,
+    "ITA": 138.0, "XLE": 89.0, "XOP": 140.0, "SHLD": 31.0,
+}
 
 # ─── Data Fetching ───
 
@@ -150,6 +161,15 @@ def fetch_prices():
         except Exception:
             pass
 
+    if not results:
+        print("  ⚠️  No live data — using demo prices")
+        results = _demo_prices()
+        CACHE["data"] = results
+        CACHE["last_updated"] = now.strftime("%Y-%m-%d %H:%M:%S") + " (demo)"
+        CACHE["alerts"] = []
+        _save_snapshot(results)
+        return
+
     # Update cache
     CACHE["data"] = results
     CACHE["last_updated"] = now.strftime("%Y-%m-%d %H:%M:%S")
@@ -178,10 +198,15 @@ def fetch_history_data(days=30):
                 ]
             except Exception:
                 pass
+        if not history:
+            print("  ⚠️  No live history — using demo history")
+            history = _demo_history()
         CACHE["history"] = history
         print(f"  ✅ History loaded for {len(history)} tickers")
     except Exception as e:
         print(f"  ❌ History fetch error: {e}")
+        print("  ⚠️  Falling back to demo history")
+        CACHE["history"] = _demo_history()
 
 
 def _save_snapshot(results):
@@ -199,6 +224,48 @@ def _save_snapshot(results):
                 "price": d["price"], "change_pct": d["change_pct"],
                 "volume": d["volume"], "high": d["high"], "low": d["low"],
             })
+
+
+def _demo_prices():
+    """Generate realistic mock prices when live data is unavailable."""
+    import random
+    now = datetime.now()
+    random.seed(int(now.strftime("%Y%m%d%H")) // 4)  # stable within a 4-hr window
+    results = {}
+    for sym in ALL_TICKERS:
+        base = DEMO_PRICES.get(sym, 50.0)
+        price = round(base * (1 + random.uniform(-0.04, 0.04)), 2)
+        prev_close = round(base * (1 + random.uniform(-0.03, 0.03)), 2)
+        change = round((price - prev_close) / prev_close * 100, 2) if prev_close else 0
+        spread = price * 0.005
+        meta = TICKER_META[sym]
+        results[sym] = {
+            "ticker": sym, "name": meta["name"],
+            "tier": meta["tier"], "color": meta["color"],
+            "price": price, "prev_close": prev_close, "change_pct": change,
+            "open": round(prev_close * 1.001, 2),
+            "high": round(price + spread, 2),
+            "low": round(price - spread, 2),
+            "volume": random.randint(500_000, 15_000_000),
+        }
+    return results
+
+
+def _demo_history():
+    """Generate synthetic 30-day price history when live data is unavailable."""
+    import random
+    base_date = datetime.now()
+    history = {}
+    for sym in ALL_TICKERS:
+        base = DEMO_PRICES.get(sym, 50.0)
+        p = base * 0.92
+        pts = []
+        for i in range(30):
+            p = round(p * (1 + random.gauss(0, 0.012)), 2)
+            d = (base_date - timedelta(days=29 - i)).strftime("%Y-%m-%d")
+            pts.append({"date": d, "close": p})
+        history[sym] = pts
+    return history
 
 
 # ─── API Routes ───

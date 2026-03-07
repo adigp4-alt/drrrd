@@ -1,0 +1,16 @@
+version: "1"
+projects:
+- name: Iran Tracker
+  environments:
+  - name: Production
+    services:
+    - type: web
+      name: iran-tracker
+      runtime: python
+      repo: https://github.com/adigp4-alt/drrrd
+      plan: free
+      envVars: []
+      region: oregon
+      buildCommand: pip install -r requirements.txt
+      startCommand: python main.py
+      autoDeployTrigger: commit

@@ -5,11 +5,8 @@ Flask server that fetches live stock data and serves the dashboard.
 """
 
 import csv
-import json
 import os
-import threading
-import time
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 
 from flask import Flask, jsonify, render_template, send_file
@@ -23,7 +20,6 @@ app = Flask(__name__)
 DATA_DIR = Path("data")
 DATA_DIR.mkdir(exist_ok=True)
 SNAPSHOT_CSV = DATA_DIR / "snapshots.csv"
-ALERTS_LOG = DATA_DIR / "alerts.json"
 
 # Cache: stores latest fetch results in memory
 CACHE = {"data": {}, "last_updated": None, "alerts": [], "history": {}}
@@ -88,8 +84,6 @@ for tid, tdata in TIERS.items():
     for sym, name in tdata["tickers"].items():
         ALL_TICKERS.append(sym)
         TICKER_META[sym] = {"tier": tid, "name": name, "color": tdata["color"]}
-
-VOLATILE = {"AVAV", "ESLT", "VG", "BWET", "FRO", "INSW", "STNG", "DHT"}
 
 
 # ─── Data Fetching ───

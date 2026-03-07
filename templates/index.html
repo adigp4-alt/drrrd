@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Iran Investment Tracker Dashboard</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/4.5.2/css/bootstrap.min.css">
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1 class="my-4">Iran Investment Tracker Dashboard</h1>
+        <div class="mb-3">
+            <label for="search">Search: </label>
+            <input type="text" id="search" class="form-control" placeholder="Search for stocks...">
+        </div>
+        <div class="mb-3">
+            <label for="tierFilter">Filter by Tier: </label>
+            <select id="tierFilter" class="form-control">
+                <option value="all">All</option>
+                <option value="tier1">Tier 1</option>
+                <option value="tier2">Tier 2</option>
+                <option value="tier3">Tier 3</option>
+            </select>
+        </div>
+        <canvas id="stockChart" width="400" height="200"></canvas>
+        <table id="stocksTable" class="table table-striped mt-4">
+            <thead>
+                <tr>
+                    <th>Stock</th>
+                    <th>Price</th>
+                    <th>Change</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+        <button id="exportCsv" class="btn btn-primary">Export as CSV</button>
+    </div>
+
+    <script>
+        // Sample stock data
+        const stocks = [
+            { name: 'Company A', price: 120, change: '+2%', tier: 'tier1' },
+            { name: 'Company B', price: 85, change: '-1%', tier: 'tier2' },
+            { name: 'Company C', price: 90, change: '+3%', tier: 'tier3' }
+        ];
+
+        const ctx = document.getElementById('stockChart').getContext('2d');
+        const stockChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: stocks.map(stock => stock.name),
+                datasets: [{
+                    label: 'Stock Prices',
+                    data: stocks.map(stock => stock.price),
+                    borderColor: 'rgba(75, 192, 192, 1)',
+                    fill: false
+                }]
+            },
+            options: {}
+        });
+
+        function renderTable(filteredStocks) {
+            const tbody = document.querySelector('#stocksTable tbody');
+            tbody.innerHTML = '';
+            filteredStocks.forEach(stock => {
+                const row = `<tr>
+                    <td>${stock.name}</td>
+                    <td>${stock.price}</td>
+                    <td>${stock.change}</td>
+                    <td><button class="btn btn-warning">Alert</button></td>
+                </tr>`;
+                tbody.innerHTML += row;
+            });
+        }
+
+        document.getElementById('tierFilter').addEventListener('change', function () {
+            const tier = this.value;
+            const filteredStocks = tier === 'all' ? stocks : stocks.filter(stock => stock.tier === tier);
+            renderTable(filteredStocks);
+        });
+
+        document.getElementById('search').addEventListener('input', function () {
+            const query = this.value.toLowerCase();
+            const filteredStocks = stocks.filter(stock => stock.name.toLowerCase().includes(query));
+            renderTable(filteredStocks);
+        });
+
+        document.getElementById('exportCsv').addEventListener('click', function () {
+            const csvContent = 'data:text/csv;charset=utf-8,' + stocks.map(stock => `${stock.name},${stock.price},${stock.change}`).join('\n');
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement('a');
+            link.setAttribute('href', encodedUri);
+            link.setAttribute('download', 'stocks.csv');
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        });
+
+        renderTable(stocks); // Initial render
+    </script>
+</body>
+</html>

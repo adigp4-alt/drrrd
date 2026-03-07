@@ -1,0 +1,13 @@
+{
+  "name": "connect-apps",
+  "version": "1.0.0",
+  "description": "Connect Claude to 500+ apps via Composio. Send emails, create issues, post messages, update databases, and take real actions across Gmail, Slack, GitHub, Notion, and more.",
+  "author": {
+    "name": "ComposioHQ",
+    "url": "https://github.com/ComposioHQ"
+  },
+  "homepage": "https://composio.dev",
+  "repository": "https://github.com/ComposioHQ/awesome-claude-plugins",
+  "license": "MIT",
+  "keywords": ["composio", "integrations", "oauth", "apps", "automation", "mcp"]
+}

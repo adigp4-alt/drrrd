@@ -5,11 +5,8 @@ Flask server that fetches live stock data and serves the dashboard.
 """
 
 import csv
-import json
 import os
-import threading
-import time
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 
 from flask import Flask, jsonify, render_template, send_file
@@ -23,7 +20,6 @@ app = Flask(__name__)
 DATA_DIR = Path("data")
 DATA_DIR.mkdir(exist_ok=True)
 SNAPSHOT_CSV = DATA_DIR / "snapshots.csv"
-ALERTS_LOG = DATA_DIR / "alerts.json"
 
 # Cache: stores latest fetch results in memory
 CACHE = {"data": {}, "last_updated": None, "alerts": [], "history": {}}
@@ -88,8 +84,6 @@ for tid, tdata in TIERS.items():
     for sym, name in tdata["tickers"].items():
         ALL_TICKERS.append(sym)
         TICKER_META[sym] = {"tier": tid, "name": name, "color": tdata["color"]}
-
-VOLATILE = {"AVAV", "ESLT", "VG", "BWET", "FRO", "INSW", "STNG", "DHT"}
 
 
 # ─── Data Fetching ───
@@ -249,20 +243,18 @@ def start_scheduler():
     print("⏰ Scheduler started: prices every 5 min, history every 6 hrs")
 
 
+# ─── Startup (runs under both gunicorn and direct execution) ───
+
+print("╔═══════════════════════════════════════════════════╗")
+print("║  IRAN INVESTMENT TRACKER — WEB SERVER             ║")
+print("╚═══════════════════════════════════════════════════╝\n")
+
+fetch_prices()
+fetch_history_data(30)
+start_scheduler()
+
 # ─── Main ───
 
 if __name__ == "__main__":
-    print("╔═══════════════════════════════════════════════════╗")
-    print("║  IRAN INVESTMENT TRACKER — WEB SERVER             ║")
-    print("╚═══════════════════════════════════════════════════╝\n")
-
-    # Initial fetch
-    fetch_prices()
-    fetch_history_data(30)
-
-    # Start background scheduler
-    start_scheduler()
-
-    # Run Flask
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)

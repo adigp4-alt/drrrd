@@ -12,24 +12,5 @@ projects:
       envVars: []
       region: oregon
       buildCommand: pip install -r requirements.txt
-      startCommand: python main.py
+      startCommand: gunicorn main:app --bind 0.0.0.0:$PORT
       autoDeployTrigger: commit
-git checkout claude/add-claude-documentation-StD8a && \
-cat << 'EOF' > pyproject.toml
-[tool.poetry]
-name = "drrrd"
-version = "0.1.0"
-description = "Your project description here"
-authors = ["Your Name <your.email@example.com>"]
-readme = "README.md"
-
-[tool.poetry.dependencies]
-python = "^3.10"
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
-EOF
-git add pyproject.toml && \
-git commit -m "chore: add pyproject.toml to fix Render poetry build" && \
-git push origin claude/add-claude-documentation-StD8a

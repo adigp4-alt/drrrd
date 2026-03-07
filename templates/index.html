@@ -11,6 +11,7 @@
 <body>
     <div class="container">
         <h1 class="my-4">Iran Investment Tracker Dashboard</h1>
+        <p id="lastUpdated" class="text-muted"></p>
         <div class="mb-3">
             <label for="search">Search: </label>
             <input type="text" id="search" class="form-control" placeholder="Search for stocks...">
@@ -19,87 +20,125 @@
             <label for="tierFilter">Filter by Tier: </label>
             <select id="tierFilter" class="form-control">
                 <option value="all">All</option>
-                <option value="tier1">Tier 1</option>
-                <option value="tier2">Tier 2</option>
-                <option value="tier3">Tier 3</option>
+                <option value="T1">T1 - Post-Conflict Reconstruction</option>
+                <option value="T2">T2 - Defense &amp; Energy Stock Picking</option>
+                <option value="T3">T3 - Israeli Equities &amp; Cybersecurity</option>
+                <option value="T4">T4 - Tanker &amp; Shipping</option>
+                <option value="T5">T5 - Broad Sector ETFs</option>
             </select>
         </div>
         <canvas id="stockChart" width="400" height="200"></canvas>
+        <div id="alerts" class="mt-3"></div>
         <table id="stocksTable" class="table table-striped mt-4">
             <thead>
                 <tr>
-                    <th>Stock</th>
+                    <th>Ticker</th>
+                    <th>Name</th>
+                    <th>Tier</th>
                     <th>Price</th>
                     <th>Change</th>
-                    <th>Action</th>
+                    <th>Volume</th>
                 </tr>
             </thead>
             <tbody></tbody>
         </table>
         <button id="exportCsv" class="btn btn-primary">Export as CSV</button>
+        <button id="refreshBtn" class="btn btn-secondary ml-2">Refresh Now</button>
     </div>
 
     <script>
-        // Sample stock data
-        const stocks = [
-            { name: 'Company A', price: 120, change: '+2%', tier: 'tier1' },
-            { name: 'Company B', price: 85, change: '-1%', tier: 'tier2' },
-            { name: 'Company C', price: 90, change: '+3%', tier: 'tier3' }
-        ];
+        let allStocks = [];
+        let stockChart = null;
 
-        const ctx = document.getElementById('stockChart').getContext('2d');
-        const stockChart = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: stocks.map(stock => stock.name),
-                datasets: [{
-                    label: 'Stock Prices',
-                    data: stocks.map(stock => stock.price),
-                    borderColor: 'rgba(75, 192, 192, 1)',
-                    fill: false
-                }]
-            },
-            options: {}
-        });
+        async function loadData() {
+            const res = await fetch('/api/prices');
+            const json = await res.json();
 
-        function renderTable(filteredStocks) {
+            if (json.last_updated) {
+                document.getElementById('lastUpdated').textContent = 'Last updated: ' + json.last_updated;
+            }
+
+            allStocks = json.ticker_order
+                .filter(sym => json.tickers[sym])
+                .map(sym => json.tickers[sym]);
+
+            renderAlerts(json.alerts || []);
+            applyFilters();
+            renderChart(allStocks.slice(0, 10));
+        }
+
+        function renderAlerts(alerts) {
+            const div = document.getElementById('alerts');
+            if (!alerts.length) { div.innerHTML = ''; return; }
+            div.innerHTML = alerts.map(a =>
+                `<div class="alert alert-${a.direction === 'surge' ? 'success' : 'danger'} py-1">
+                    ${a.message}
+                 </div>`
+            ).join('');
+        }
+
+        function renderChart(stocks) {
+            const ctx = document.getElementById('stockChart').getContext('2d');
+            if (stockChart) stockChart.destroy();
+            stockChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: stocks.map(s => s.ticker),
+                    datasets: [{
+                        label: 'Price (USD)',
+                        data: stocks.map(s => s.price),
+                        backgroundColor: stocks.map(s => s.color || 'rgba(75,192,192,0.6)'),
+                    }]
+                },
+                options: { scales: { y: { beginAtZero: false } } }
+            });
+        }
+
+        function renderTable(stocks) {
             const tbody = document.querySelector('#stocksTable tbody');
             tbody.innerHTML = '';
-            filteredStocks.forEach(stock => {
+            stocks.forEach(stock => {
+                const changeClass = stock.change_pct >= 0 ? 'text-success' : 'text-danger';
                 const row = `<tr>
+                    <td><strong>${stock.ticker}</strong></td>
                     <td>${stock.name}</td>
-                    <td>${stock.price}</td>
-                    <td>${stock.change}</td>
-                    <td><button class="btn btn-warning">Alert</button></td>
+                    <td>${stock.tier}</td>
+                    <td>$${stock.price.toFixed(2)}</td>
+                    <td class="${changeClass}">${stock.change_pct >= 0 ? '+' : ''}${stock.change_pct.toFixed(2)}%</td>
+                    <td>${stock.volume.toLocaleString()}</td>
                 </tr>`;
                 tbody.innerHTML += row;
             });
         }
 
-        document.getElementById('tierFilter').addEventListener('change', function () {
-            const tier = this.value;
-            const filteredStocks = tier === 'all' ? stocks : stocks.filter(stock => stock.tier === tier);
-            renderTable(filteredStocks);
-        });
+        function applyFilters() {
+            const tier = document.getElementById('tierFilter').value;
+            const query = document.getElementById('search').value.toLowerCase();
+            const filtered = allStocks.filter(s => {
+                const matchesTier = tier === 'all' || s.tier === tier;
+                const matchesQuery = s.ticker.toLowerCase().includes(query) || s.name.toLowerCase().includes(query);
+                return matchesTier && matchesQuery;
+            });
+            renderTable(filtered);
+        }
 
-        document.getElementById('search').addEventListener('input', function () {
-            const query = this.value.toLowerCase();
-            const filteredStocks = stocks.filter(stock => stock.name.toLowerCase().includes(query));
-            renderTable(filteredStocks);
-        });
+        document.getElementById('tierFilter').addEventListener('change', applyFilters);
+        document.getElementById('search').addEventListener('input', applyFilters);
 
         document.getElementById('exportCsv').addEventListener('click', function () {
-            const csvContent = 'data:text/csv;charset=utf-8,' + stocks.map(stock => `${stock.name},${stock.price},${stock.change}`).join('\n');
-            const encodedUri = encodeURI(csvContent);
-            const link = document.createElement('a');
-            link.setAttribute('href', encodedUri);
-            link.setAttribute('download', 'stocks.csv');
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
+            window.location.href = '/api/download/csv';
         });
 
-        renderTable(stocks); // Initial render
+        document.getElementById('refreshBtn').addEventListener('click', async function () {
+            this.disabled = true;
+            this.textContent = 'Refreshing...';
+            await fetch('/api/refresh', { method: 'POST' });
+            await loadData();
+            this.disabled = false;
+            this.textContent = 'Refresh Now';
+        });
+
+        loadData();
     </script>
 </body>
 </html>

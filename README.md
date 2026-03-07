@@ -4,6 +4,14 @@ Live stock dashboard tracking energy, defense, shipping, and tech tickers across
 
 ---
 
+## Deploy Now (one tap)
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/adigp4-alt/drrrd)
+
+> Tap the button → sign in with GitHub → click **Deploy** → your live URL appears in ~2 minutes. Free tier, no credit card needed.
+
+---
+
 ## One-Click Launch (Docker — recommended)
 
 > Works on any machine with Docker installed, including cloud VMs and servers.

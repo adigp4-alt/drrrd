@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: investment-tracker
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python utopia.py
+    envVars:
+      - key: PORT
+        value: 10000
+    autoDeploy: true

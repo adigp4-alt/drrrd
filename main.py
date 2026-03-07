@@ -6,6 +6,7 @@ Flask server that fetches live stock data and serves the dashboard.
 
 import csv
 import os
+import threading
 from datetime import datetime
 from pathlib import Path
 
@@ -249,9 +250,12 @@ print("╔═══════════════════════�
 print("║  IRAN INVESTMENT TRACKER — WEB SERVER             ║")
 print("╚═══════════════════════════════════════════════════╝\n")
 
-fetch_prices()
-fetch_history_data(30)
-start_scheduler()
+def _startup():
+    fetch_prices()
+    fetch_history_data(30)
+    start_scheduler()
+
+threading.Thread(target=_startup, daemon=True).start()
 
 # ─── Main ───
 

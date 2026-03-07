@@ -1,0 +1,19 @@
+# Exported from Render on 2026-03-07T02:50:15Z
+version: "1"
+projects:
+- name: My project
+  environments:
+  - name: Production
+    services:
+    - type: web
+      name: drrrd-1
+      runtime: python
+      repo: https://github.com/adigp4-alt/drrrd
+      plan: free
+      envVars:
+      - key: Unknown
+        sync: false
+      region: oregon
+      buildCommand: poetry install
+      startCommand: poetry run python main.py
+      autoDeployTrigger: commit

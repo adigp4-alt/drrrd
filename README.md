@@ -9,7 +9,7 @@ Live stock dashboard tracking energy, defense, shipping, and tech tickers across
 > Works on any machine with Docker installed, including cloud VMs and servers.
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/adigp4-alt/drrrd
 cd drrrd
 docker compose up
 ```
@@ -33,7 +33,7 @@ docker compose down
 **Requirements:** Python 3.10+
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/adigp4-alt/drrrd
 cd drrrd
 bash run.sh
 ```
@@ -54,7 +54,7 @@ Then open **http://localhost:5000**.
 2. Install Docker: https://docs.docker.com/engine/install/
 3. Clone and run:
    ```bash
-   git clone <your-repo-url>
+   git clone https://github.com/adigp4-alt/drrrd
    cd drrrd
    docker compose up -d
    ```

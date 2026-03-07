@@ -249,20 +249,18 @@ def start_scheduler():
     print("⏰ Scheduler started: prices every 5 min, history every 6 hrs")
 
 
+# ─── Startup (runs under both gunicorn and direct execution) ───
+
+print("╔═══════════════════════════════════════════════════╗")
+print("║  IRAN INVESTMENT TRACKER — WEB SERVER             ║")
+print("╚═══════════════════════════════════════════════════╝\n")
+
+fetch_prices()
+fetch_history_data(30)
+start_scheduler()
+
 # ─── Main ───
 
 if __name__ == "__main__":
-    print("╔═══════════════════════════════════════════════════╗")
-    print("║  IRAN INVESTMENT TRACKER — WEB SERVER             ║")
-    print("╚═══════════════════════════════════════════════════╝\n")
-
-    # Initial fetch
-    fetch_prices()
-    fetch_history_data(30)
-
-    # Start background scheduler
-    start_scheduler()
-
-    # Run Flask
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)

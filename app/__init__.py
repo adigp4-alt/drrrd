@@ -30,13 +30,14 @@ def create_app():
     init_db()
 
     # Register blueprints
-    from app.routes import dashboard, portfolio, analysis, alerts_api, watchlist, export
+    from app.routes import dashboard, portfolio, analysis, alerts_api, watchlist, export, autonomous
     app.register_blueprint(dashboard.bp)
     app.register_blueprint(portfolio.bp)
     app.register_blueprint(analysis.bp)
     app.register_blueprint(alerts_api.bp)
     app.register_blueprint(watchlist.bp)
     app.register_blueprint(export.bp)
+    app.register_blueprint(autonomous.bp)
 
     @app.route("/health")
     def health_check():

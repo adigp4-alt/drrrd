@@ -1,0 +1,264 @@
+{% extends "base.html" %}
+{% block title %}Autonomous Strategy — Iran Investment Tracker{% endblock %}
+
+{% block style %}
+.signal-buy { border-left: 4px solid #27ae60; }
+.signal-sell { border-left: 4px solid #e74c3c; }
+.signal-watch { border-left: 4px solid #f39c12; }
+.signal-rebalance { border-left: 4px solid #8e44ad; }
+.score-bar { height: 8px; border-radius: 4px; background: #e9ecef; overflow: hidden; }
+.score-fill { height: 100%; border-radius: 4px; transition: width 0.5s; }
+.rec-HIGH { border-left: 4px solid #e74c3c; }
+.rec-MEDIUM { border-left: 4px solid #f39c12; }
+.rec-LOW { border-left: 4px solid #6c757d; }
+.alloc-bar { height: 24px; border-radius: 4px; background: #e9ecef; overflow: hidden; position: relative; }
+.alloc-fill { height: 100%; position: absolute; top: 0; left: 0; transition: width 0.5s; }
+.alloc-target { position: absolute; top: 0; height: 100%; width: 2px; background: #000; z-index: 2; }
+.tier-label { font-size: 0.85rem; }
+#scanBtn:disabled { opacity: 0.6; }
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h3 class="mb-0">Autonomous Strategy</h3>
+        <small class="text-muted" id="lastRun">Last scan: never</small>
+    </div>
+    <button id="scanBtn" class="btn btn-primary" onclick="triggerScan()">Run Scan</button>
+</div>
+
+<!-- Summary Cards -->
+<div class="row mb-4" id="summaryCards">
+    <div class="col-md-3"><div class="card stat-card"><div class="value" id="totalSignals">-</div><div class="label">Total Signals</div></div></div>
+    <div class="col-md-3"><div class="card stat-card"><div class="value text-profit" id="buySignals">-</div><div class="label">Buy Signals</div></div></div>
+    <div class="col-md-3"><div class="card stat-card"><div class="value text-loss" id="sellSignals">-</div><div class="label">Sell Signals</div></div></div>
+    <div class="col-md-3"><div class="card stat-card"><div class="value" id="recCount">-</div><div class="label">Recommendations</div></div></div>
+</div>
+
+<!-- Recommendations -->
+<div class="card mb-4">
+    <div class="card-header"><strong>Recommendations</strong></div>
+    <div class="card-body p-0">
+        <div id="recsContainer" class="list-group list-group-flush">
+            <div class="list-group-item text-muted text-center py-4">Run a scan to generate recommendations</div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Ticker Scores -->
+    <div class="col-md-6">
+        <div class="card mb-4">
+            <div class="card-header"><strong>Ticker Scores</strong> <small class="text-muted">(0 = bearish, 100 = bullish)</small></div>
+            <div class="card-body p-0">
+                <div id="scoresContainer" style="max-height: 500px; overflow-y: auto;">
+                    <div class="text-muted text-center py-4">No scores yet</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Rebalance -->
+    <div class="col-md-6">
+        <div class="card mb-4">
+            <div class="card-header"><strong>Portfolio Rebalancing</strong></div>
+            <div class="card-body" id="rebalanceContainer">
+                <div class="text-muted text-center py-4">Run a scan to check allocation drift</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- All Signals -->
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <strong>All Signals</strong>
+        <div class="btn-group btn-group-sm">
+            <button class="btn btn-outline-secondary active" onclick="filterSignals('ALL', this)">All</button>
+            <button class="btn btn-outline-success" onclick="filterSignals('BUY', this)">Buy</button>
+            <button class="btn btn-outline-danger" onclick="filterSignals('SELL', this)">Sell</button>
+            <button class="btn btn-outline-warning" onclick="filterSignals('WATCH', this)">Watch</button>
+        </div>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0" id="signalsTable">
+                <thead><tr>
+                    <th>Type</th><th>Ticker</th><th>Name</th><th>Tier</th><th>Price</th>
+                    <th>Indicator</th><th>Reason</th><th>Strength</th>
+                </tr></thead>
+                <tbody id="signalsBody">
+                    <tr><td colspan="8" class="text-center text-muted py-4">No signals yet</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let allData = null;
+let currentFilter = 'ALL';
+
+function load() {
+    fetch('/api/autonomous').then(r => r.json()).then(data => {
+        allData = data;
+        render(data);
+    });
+}
+
+function render(data) {
+    // Last run
+    document.getElementById('lastRun').textContent = data.last_run
+        ? 'Last scan: ' + data.last_run : 'Last scan: never';
+
+    // Summary
+    const sigs = data.signals || [];
+    document.getElementById('totalSignals').textContent = sigs.length;
+    document.getElementById('buySignals').textContent = sigs.filter(s => s.type === 'BUY').length;
+    document.getElementById('sellSignals').textContent = sigs.filter(s => s.type === 'SELL').length;
+    document.getElementById('recCount').textContent = (data.recommendations || []).length;
+
+    renderRecommendations(data.recommendations || []);
+    renderScores(data.scores || {});
+    renderRebalance(data.rebalance || {});
+    renderSignals(sigs);
+}
+
+function renderRecommendations(recs) {
+    const c = document.getElementById('recsContainer');
+    if (!recs.length) { c.innerHTML = '<div class="list-group-item text-muted text-center py-4">No recommendations — run a scan</div>'; return; }
+    c.innerHTML = recs.map(r => {
+        const icon = r.action === 'BUY' ? '&#x25B2;' : r.action === 'SELL' ? '&#x25BC;' : r.action === 'REBALANCE' ? '&#x21C4;' : '&#x25CF;';
+        const color = r.action === 'BUY' || r.action === 'WATCH_BUY' ? 'text-profit' : r.action === 'SELL' || r.action === 'WATCH_SELL' ? 'text-loss' : '';
+        const badge = r.priority === 'HIGH' ? 'bg-danger' : r.priority === 'MEDIUM' ? 'bg-warning text-dark' : 'bg-secondary';
+        const priceStr = r.price ? ' @ $' + r.price.toFixed(2) : '';
+        const scoreStr = r.score !== null ? ' (score: ' + r.score + ')' : '';
+        return `<div class="list-group-item rec-${r.priority}">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <span class="${color}" style="font-size:1.1rem">${icon}</span>
+                    <strong>${r.action}</strong>
+                    ${r.ticker ? '<code>' + r.ticker + '</code>' : ''}
+                    <span class="text-muted">${r.name}${priceStr}${scoreStr}</span>
+                </div>
+                <span class="badge ${badge}">${r.priority}</span>
+            </div>
+            ${r.reasons.length ? '<small class="text-muted">' + r.reasons.join(' | ') + '</small>' : ''}
+        </div>`;
+    }).join('');
+}
+
+function renderScores(scores) {
+    const c = document.getElementById('scoresContainer');
+    const entries = Object.entries(scores).sort((a, b) => b[1] - a[1]);
+    if (!entries.length) { c.innerHTML = '<div class="text-muted text-center py-4">No scores yet</div>'; return; }
+    c.innerHTML = '<div class="list-group list-group-flush">' + entries.map(([ticker, score]) => {
+        const color = score >= 70 ? '#27ae60' : score <= 30 ? '#e74c3c' : score >= 55 ? '#f39c12' : '#6c757d';
+        return `<div class="list-group-item d-flex align-items-center py-2">
+            <code class="me-2" style="min-width:50px">${ticker}</code>
+            <div class="score-bar flex-grow-1 me-2"><div class="score-fill" style="width:${score}%;background:${color}"></div></div>
+            <strong style="min-width:30px;color:${color}">${score}</strong>
+        </div>`;
+    }).join('') + '</div>';
+}
+
+function renderRebalance(reb) {
+    const c = document.getElementById('rebalanceContainer');
+    if (!reb.current_allocation || !Object.keys(reb.current_allocation).length) {
+        c.innerHTML = '<div class="text-muted text-center py-4">Add holdings to your portfolio for rebalancing advice</div>';
+        return;
+    }
+    const target = reb.target_allocation || {};
+    const current = reb.current_allocation || {};
+    const tiers = Object.keys(target);
+
+    let html = '';
+    if (reb.total_value) html += `<p class="mb-3">Total Portfolio: <strong>$${reb.total_value.toLocaleString()}</strong></p>`;
+
+    html += tiers.map(t => {
+        const cur = current[t] || 0;
+        const tgt = target[t] || 0;
+        const drift = cur - tgt;
+        const driftColor = Math.abs(drift) > 5 ? (drift > 0 ? '#e74c3c' : '#2E86C1') : '#27ae60';
+        return `<div class="mb-3">
+            <div class="d-flex justify-content-between tier-label">
+                <span><strong>${t}</strong></span>
+                <span>Current: ${cur.toFixed(1)}% | Target: ${tgt}% | <span style="color:${driftColor}">Drift: ${drift > 0 ? '+' : ''}${drift.toFixed(1)}%</span></span>
+            </div>
+            <div class="alloc-bar">
+                <div class="alloc-fill" style="width:${Math.min(cur, 100)}%;background:${driftColor};opacity:0.4"></div>
+                <div class="alloc-target" style="left:${tgt}%" title="Target: ${tgt}%"></div>
+            </div>
+        </div>`;
+    }).join('');
+
+    if (reb.actions && reb.actions.length) {
+        html += '<hr><h6>Actions Needed:</h6><ul class="mb-0">';
+        html += reb.actions.map(a => `<li>${a.message}</li>`).join('');
+        html += '</ul>';
+    } else {
+        html += '<hr><p class="text-profit mb-0">Portfolio is balanced within tolerance.</p>';
+    }
+
+    c.innerHTML = html;
+}
+
+function renderSignals(sigs) {
+    const filtered = currentFilter === 'ALL' ? sigs : sigs.filter(s => s.type === currentFilter);
+    const body = document.getElementById('signalsBody');
+    if (!filtered.length) {
+        body.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">No signals</td></tr>';
+        return;
+    }
+    body.innerHTML = filtered.map(s => {
+        const cls = s.type === 'BUY' ? 'signal-buy' : s.type === 'SELL' ? 'signal-sell' : 'signal-watch';
+        const badge = s.type === 'BUY' ? 'bg-success' : s.type === 'SELL' ? 'bg-danger' : 'bg-warning text-dark';
+        return `<tr class="${cls}">
+            <td><span class="badge ${badge}">${s.type}</span></td>
+            <td><code>${s.ticker}</code></td>
+            <td>${s.name}</td>
+            <td>${s.tier}</td>
+            <td>${s.price ? '$' + s.price.toFixed(2) : '-'}</td>
+            <td>${s.indicator}</td>
+            <td>${s.reason}</td>
+            <td><div class="score-bar" style="width:80px;display:inline-block"><div class="score-fill" style="width:${s.strength}%;background:${s.type === 'BUY' ? '#27ae60' : s.type === 'SELL' ? '#e74c3c' : '#f39c12'}"></div></div> ${s.strength}%</td>
+        </tr>`;
+    }).join('');
+}
+
+function filterSignals(type, btn) {
+    currentFilter = type;
+    document.querySelectorAll('.btn-group .btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    if (allData) renderSignals(allData.signals || []);
+}
+
+function triggerScan() {
+    const btn = document.getElementById('scanBtn');
+    btn.disabled = true;
+    btn.textContent = 'Scanning...';
+    fetch('/api/autonomous/scan', {method: 'POST'}).then(r => r.json()).then(() => {
+        // Poll for completion
+        const poll = setInterval(() => {
+            fetch('/api/autonomous').then(r => r.json()).then(data => {
+                if (data.last_run && (!allData || data.last_run !== allData.last_run)) {
+                    clearInterval(poll);
+                    allData = data;
+                    render(data);
+                    btn.disabled = false;
+                    btn.textContent = 'Run Scan';
+                }
+            });
+        }, 3000);
+        // Timeout after 5 minutes
+        setTimeout(() => { clearInterval(poll); btn.disabled = false; btn.textContent = 'Run Scan'; }, 300000);
+    });
+}
+
+load();
+// Auto-refresh every 60 seconds
+setInterval(load, 60000);
+</script>
+{% endblock %}

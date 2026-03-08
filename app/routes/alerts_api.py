@@ -41,6 +41,9 @@ def create_alert():
     except (ValueError, TypeError):
         return jsonify({"error": "threshold must be a number"}), 400
 
+    if threshold < 0:
+        return jsonify({"error": "threshold must be non-negative"}), 400
+
     row_id = execute_db(
         "INSERT INTO alert_rules (ticker, condition, threshold) VALUES (?, ?, ?)",
         (data["ticker"].upper(), data["condition"], threshold)

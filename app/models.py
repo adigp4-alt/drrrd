@@ -1,9 +1,12 @@
 """SQLite database initialization and helper functions."""
 
+import logging
 import sqlite3
 from contextlib import contextmanager
 
 from app.config import DB_PATH
+
+logger = logging.getLogger(__name__)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS holdings (
@@ -53,12 +56,16 @@ def init_db():
 
 @contextmanager
 def get_db():
-    """Context manager for database connections."""
+    """Context manager for database connections with proper rollback on error."""
     conn = sqlite3.connect(str(DB_PATH))
     conn.row_factory = sqlite3.Row
     try:
         yield conn
         conn.commit()
+    except Exception:
+        conn.rollback()
+        logger.exception("Database operation failed, rolled back")
+        raise
     finally:
         conn.close()
 

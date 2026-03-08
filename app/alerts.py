@@ -1,11 +1,14 @@
 """Alert engine and Telegram integration."""
 
+import logging
 import os
 from datetime import datetime
 
 import requests
 
 from app.models import query_db, execute_db, get_db
+
+logger = logging.getLogger(__name__)
 
 
 def check_alerts(current_data):
@@ -69,4 +72,5 @@ def send_telegram(message):
         resp = requests.post(url, json={"chat_id": chat_id, "text": message}, timeout=10)
         return resp.ok
     except Exception:
+        logger.exception("Failed to send Telegram message")
         return False

@@ -18,10 +18,15 @@ def analysis_page():
     return render_template("analysis.html", tickers=ALL_TICKERS, ticker_meta=TICKER_META)
 
 
+VALID_PERIODS = {"1mo", "3mo", "6mo", "1y", "2y", "5y"}
+
+
 @bp.route("/api/analysis/<ticker>")
 def api_analysis(ticker):
     ticker = ticker.upper()
     period = request.args.get("period", "6mo")
+    if period not in VALID_PERIODS:
+        return jsonify({"error": f"period must be one of {sorted(VALID_PERIODS)}"}), 400
     if ticker not in TICKER_META:
         return jsonify({"error": "Unknown ticker"}), 404
 

@@ -1,10 +1,16 @@
 """Portfolio CRUD routes."""
 
+import logging
+
 from flask import Blueprint, jsonify, render_template, request
 
 from app.config import TICKER_META
 from app.data_fetcher import CACHE
 from app.models import query_db, execute_db, get_db
+
+logger = logging.getLogger(__name__)
+
+ALLOWED_HOLDING_FIELDS = {"shares", "buy_price", "buy_date", "notes"}
 
 bp = Blueprint("portfolio", __name__)
 
@@ -85,7 +91,7 @@ def update_holding(holding_id):
     fields = []
     values = []
     for key in ("shares", "buy_price", "buy_date", "notes"):
-        if key in data:
+        if key in data and key in ALLOWED_HOLDING_FIELDS:
             fields.append(f"{key} = ?")
             values.append(data[key])
 
@@ -93,13 +99,21 @@ def update_holding(holding_id):
         return jsonify({"error": "No valid fields to update"}), 400
 
     values.append(holding_id)
-    with get_db() as db:
-        db.execute(f"UPDATE holdings SET {', '.join(fields)} WHERE id = ?", values)
-    return jsonify({"status": "updated"})
+    try:
+        with get_db() as db:
+            db.execute(f"UPDATE holdings SET {', '.join(fields)} WHERE id = ?", values)
+        return jsonify({"status": "updated"})
+    except Exception:
+        logger.exception("Failed to update holding %d", holding_id)
+        return jsonify({"error": "Database error"}), 500
 
 
 @bp.route("/api/portfolio/<int:holding_id>", methods=["DELETE"])
 def delete_holding(holding_id):
-    with get_db() as db:
-        db.execute("DELETE FROM holdings WHERE id = ?", (holding_id,))
-    return jsonify({"status": "deleted"})
+    try:
+        with get_db() as db:
+            db.execute("DELETE FROM holdings WHERE id = ?", (holding_id,))
+        return jsonify({"status": "deleted"})
+    except Exception:
+        logger.exception("Failed to delete holding %d", holding_id)
+        return jsonify({"error": "Database error"}), 500

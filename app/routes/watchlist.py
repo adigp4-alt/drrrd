@@ -1,10 +1,16 @@
 """Watchlist and notes routes."""
 
+import logging
+
 from flask import Blueprint, jsonify, render_template, request
 
 from app.config import TICKER_META
 from app.data_fetcher import CACHE
 from app.models import query_db, execute_db, get_db
+
+logger = logging.getLogger(__name__)
+
+ALLOWED_WATCHLIST_FIELDS = {"price_target_high", "price_target_low", "notes", "tags"}
 
 bp = Blueprint("watchlist", __name__)
 
@@ -70,6 +76,7 @@ def add_to_watchlist():
              data.get("notes", ""), data.get("tags", ""))
         )
     except Exception:
+        logger.exception("Failed to add ticker %s to watchlist", ticker)
         return jsonify({"error": "Ticker already in watchlist"}), 409
 
     return jsonify({"id": row_id, "status": "created"}), 201
@@ -84,7 +91,7 @@ def update_watchlist(item_id):
     fields = []
     values = []
     for key in ("price_target_high", "price_target_low", "notes", "tags"):
-        if key in data:
+        if key in data and key in ALLOWED_WATCHLIST_FIELDS:
             fields.append(f"{key} = ?")
             values.append(data[key])
 
@@ -92,13 +99,21 @@ def update_watchlist(item_id):
         return jsonify({"error": "No valid fields to update"}), 400
 
     values.append(item_id)
-    with get_db() as db:
-        db.execute(f"UPDATE watchlist SET {', '.join(fields)} WHERE id = ?", values)
-    return jsonify({"status": "updated"})
+    try:
+        with get_db() as db:
+            db.execute(f"UPDATE watchlist SET {', '.join(fields)} WHERE id = ?", values)
+        return jsonify({"status": "updated"})
+    except Exception:
+        logger.exception("Failed to update watchlist item %d", item_id)
+        return jsonify({"error": "Database error"}), 500
 
 
 @bp.route("/api/watchlist/<int:item_id>", methods=["DELETE"])
 def delete_from_watchlist(item_id):
-    with get_db() as db:
-        db.execute("DELETE FROM watchlist WHERE id = ?", (item_id,))
-    return jsonify({"status": "deleted"})
+    try:
+        with get_db() as db:
+            db.execute("DELETE FROM watchlist WHERE id = ?", (item_id,))
+        return jsonify({"status": "deleted"})
+    except Exception:
+        logger.exception("Failed to delete watchlist item %d", item_id)
+        return jsonify({"error": "Database error"}), 500

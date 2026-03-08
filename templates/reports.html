@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}Reports — Iran Investment Tracker{% endblock %}
+
+{% block content %}
+<h2 class="mb-3">Reports & Export</h2>
+
+<div class="row mb-4">
+    <div class="col-md-3"><div class="card stat-card"><div class="label">Total Tracked</div><div class="value" id="totalTickers">—</div></div></div>
+    <div class="col-md-3"><div class="card stat-card"><div class="label">Top Gainer</div><div class="value text-profit" id="topGainer">—</div></div></div>
+    <div class="col-md-3"><div class="card stat-card"><div class="label">Top Loser</div><div class="value text-loss" id="topLoser">—</div></div></div>
+    <div class="col-md-3"><div class="card stat-card"><div class="label">Generated</div><div class="value" id="genTime" style="font-size:1rem">—</div></div></div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">Top Gainers</div>
+            <div class="card-body p-0">
+                <table class="table table-sm mb-0" id="gainersTable">
+                    <thead><tr><th>Ticker</th><th>Price</th><th>Change</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">Top Losers</div>
+            <div class="card-body p-0">
+                <table class="table table-sm mb-0" id="losersTable">
+                    <thead><tr><th>Ticker</th><th>Price</th><th>Change</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header">Tier Performance</div>
+    <div class="card-body">
+        <canvas id="tierChart" height="100"></canvas>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">Export</div>
+    <div class="card-body">
+        <a href="/api/reports/excel" class="btn btn-success me-2">Download Excel Report</a>
+        <a href="/api/download/csv" class="btn btn-outline-secondary">Download Raw CSV</a>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let tierChart = null;
+
+async function loadSummary() {
+    const res = await fetch('/api/reports/summary');
+    const json = await res.json();
+
+    if (json.error) return;
+
+    document.getElementById('totalTickers').textContent = json.total_tickers;
+    document.getElementById('genTime').textContent = json.generated_at;
+
+    if (json.top_gainers.length) {
+        const g = json.top_gainers[0];
+        document.getElementById('topGainer').textContent = `${g.ticker} +${g.change_pct.toFixed(2)}%`;
+    }
+    if (json.top_losers.length) {
+        const l = json.top_losers[0];
+        document.getElementById('topLoser').textContent = `${l.ticker} ${l.change_pct.toFixed(2)}%`;
+    }
+
+    document.querySelector('#gainersTable tbody').innerHTML = json.top_gainers.map(g =>
+        `<tr><td><strong>${g.ticker}</strong></td><td>$${g.price.toFixed(2)}</td><td class="text-profit">+${g.change_pct.toFixed(2)}%</td></tr>`
+    ).join('');
+
+    document.querySelector('#losersTable tbody').innerHTML = json.top_losers.map(l =>
+        `<tr><td><strong>${l.ticker}</strong></td><td>$${l.price.toFixed(2)}</td><td class="text-loss">${l.change_pct.toFixed(2)}%</td></tr>`
+    ).join('');
+
+    // Tier chart
+    const tiers = json.tier_performance;
+    const tierKeys = Object.keys(tiers);
+    const ctx = document.getElementById('tierChart').getContext('2d');
+    if (tierChart) tierChart.destroy();
+    tierChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: tierKeys.map(k => `${k}: ${tiers[k].name}`),
+            datasets: [{
+                label: 'Avg Change %',
+                data: tierKeys.map(k => tiers[k].avg_change),
+                backgroundColor: tierKeys.map(k => tiers[k].avg_change >= 0 ? '#27ae60' : '#e74c3c'),
+                borderRadius: 4,
+            }]
+        },
+        options: {
+            responsive: true,
+            indexAxis: 'y',
+            plugins: { legend: { display: false } },
+        }
+    });
+}
+
+loadSummary();
+</script>
+{% endblock %}

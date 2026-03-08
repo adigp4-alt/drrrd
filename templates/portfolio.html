@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% block title %}Portfolio — Iran Investment Tracker{% endblock %}
+
+{% block content %}
+<h2 class="mb-3">Portfolio Tracker</h2>
+
+<div class="row mb-4" id="summaryCards">
+    <div class="col-md-3"><div class="card stat-card"><div class="label">Total Value</div><div class="value" id="totalValue">—</div></div></div>
+    <div class="col-md-3"><div class="card stat-card"><div class="label">Total Cost</div><div class="value" id="totalCost">—</div></div></div>
+    <div class="col-md-3"><div class="card stat-card"><div class="label">Total P&L</div><div class="value" id="totalPnl">—</div></div></div>
+    <div class="col-md-3"><div class="card stat-card"><div class="label">Positions</div><div class="value" id="posCount">—</div></div></div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">Holdings</div>
+            <div class="card-body p-0">
+                <table class="table table-hover mb-0" id="holdingsTable">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>Ticker</th><th>Name</th><th>Tier</th><th>Shares</th>
+                            <th>Buy Price</th><th>Current</th><th>Cost Basis</th>
+                            <th>Market Value</th><th>P&L</th><th>P&L %</th><th>Alloc %</th><th></th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card mb-3">
+            <div class="card-header">Add Position</div>
+            <div class="card-body">
+                <form id="addForm">
+                    <div class="mb-2">
+                        <input type="text" class="form-control form-control-sm" id="addTicker" placeholder="Ticker (e.g. AAPL)" required>
+                    </div>
+                    <div class="mb-2">
+                        <input type="number" class="form-control form-control-sm" id="addShares" placeholder="Shares" step="any" required>
+                    </div>
+                    <div class="mb-2">
+                        <input type="number" class="form-control form-control-sm" id="addBuyPrice" placeholder="Buy Price" step="any" required>
+                    </div>
+                    <div class="mb-2">
+                        <input type="date" class="form-control form-control-sm" id="addBuyDate">
+                    </div>
+                    <div class="mb-2">
+                        <input type="text" class="form-control form-control-sm" id="addNotes" placeholder="Notes (optional)">
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-sm w-100">Add Position</button>
+                </form>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-header">Allocation</div>
+            <div class="card-body">
+                <canvas id="allocChart" height="250"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let allocChart = null;
+
+async function loadPortfolio() {
+    const res = await fetch('/api/portfolio');
+    const json = await res.json();
+
+    document.getElementById('totalValue').textContent = '$' + json.total_value.toLocaleString(undefined, {minimumFractionDigits: 2});
+    document.getElementById('totalCost').textContent = '$' + json.total_cost.toLocaleString(undefined, {minimumFractionDigits: 2});
+    const pnlEl = document.getElementById('totalPnl');
+    pnlEl.textContent = (json.total_pnl >= 0 ? '+$' : '-$') + Math.abs(json.total_pnl).toLocaleString(undefined, {minimumFractionDigits: 2});
+    pnlEl.className = 'value ' + (json.total_pnl >= 0 ? 'text-profit' : 'text-loss');
+    document.getElementById('posCount').textContent = json.holdings.length;
+
+    const tbody = document.querySelector('#holdingsTable tbody');
+    tbody.innerHTML = json.holdings.map(h => {
+        const cls = h.pnl >= 0 ? 'text-profit' : 'text-loss';
+        return `<tr>
+            <td><strong style="color:${h.color}">${h.ticker}</strong></td>
+            <td>${h.name}</td>
+            <td>${h.tier}</td>
+            <td>${h.shares}</td>
+            <td>$${h.buy_price.toFixed(2)}</td>
+            <td>$${h.current_price.toFixed(2)}</td>
+            <td>$${h.cost_basis.toFixed(2)}</td>
+            <td>$${h.market_value.toFixed(2)}</td>
+            <td class="${cls}">${h.pnl >= 0 ? '+' : ''}$${h.pnl.toFixed(2)}</td>
+            <td class="${cls}">${h.pnl_pct >= 0 ? '+' : ''}${h.pnl_pct.toFixed(2)}%</td>
+            <td>${h.allocation.toFixed(1)}%</td>
+            <td><button class="btn btn-outline-danger btn-sm" onclick="deleteHolding(${h.id})">X</button></td>
+        </tr>`;
+    }).join('');
+
+    renderAllocChart(json.holdings);
+}
+
+function renderAllocChart(holdings) {
+    const ctx = document.getElementById('allocChart').getContext('2d');
+    if (allocChart) allocChart.destroy();
+    if (!holdings.length) return;
+    allocChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: holdings.map(h => h.ticker),
+            datasets: [{
+                data: holdings.map(h => h.allocation),
+                backgroundColor: holdings.map(h => h.color),
+            }]
+        },
+        options: { plugins: { legend: { position: 'bottom', labels: { boxWidth: 12 } } } }
+    });
+}
+
+document.getElementById('addForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const body = {
+        ticker: document.getElementById('addTicker').value,
+        shares: parseFloat(document.getElementById('addShares').value),
+        buy_price: parseFloat(document.getElementById('addBuyPrice').value),
+        buy_date: document.getElementById('addBuyDate').value,
+        notes: document.getElementById('addNotes').value,
+    };
+    await fetch('/api/portfolio', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body)
+    });
+    e.target.reset();
+    loadPortfolio();
+});
+
+async function deleteHolding(id) {
+    if (!confirm('Remove this position?')) return;
+    await fetch('/api/portfolio/' + id, { method: 'DELETE' });
+    loadPortfolio();
+}
+
+loadPortfolio();
+</script>
+{% endblock %}

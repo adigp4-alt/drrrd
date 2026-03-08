@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block title %}Watchlist — Iran Investment Tracker{% endblock %}
+
+{% block content %}
+<h2 class="mb-3">Watchlist</h2>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="mb-3">
+            <input type="text" class="form-control" id="tagFilter" placeholder="Filter by tag...">
+        </div>
+        <div class="card">
+            <div class="card-body p-0">
+                <table class="table table-hover mb-0" id="watchlistTable">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>Ticker</th><th>Name</th><th>Price</th><th>Change</th>
+                            <th>Target High</th><th>Target Low</th>
+                            <th>Dist High</th><th>Dist Low</th>
+                            <th>Tags</th><th>Notes</th><th></th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">Add to Watchlist</div>
+            <div class="card-body">
+                <form id="watchForm">
+                    <div class="mb-2">
+                        <input type="text" class="form-control form-control-sm" id="wTicker" placeholder="Ticker" required>
+                    </div>
+                    <div class="mb-2">
+                        <input type="number" class="form-control form-control-sm" id="wTargetHigh" placeholder="Price Target (High)" step="any">
+                    </div>
+                    <div class="mb-2">
+                        <input type="number" class="form-control form-control-sm" id="wTargetLow" placeholder="Price Target (Low)" step="any">
+                    </div>
+                    <div class="mb-2">
+                        <input type="text" class="form-control form-control-sm" id="wTags" placeholder="Tags (comma separated)">
+                    </div>
+                    <div class="mb-2">
+                        <textarea class="form-control form-control-sm" id="wNotes" placeholder="Notes" rows="2"></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-sm w-100">Add to Watchlist</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let allWatchlist = [];
+
+async function loadWatchlist() {
+    const res = await fetch('/api/watchlist');
+    const json = await res.json();
+    allWatchlist = json.watchlist;
+    filterAndRender();
+}
+
+function filterAndRender() {
+    const tagFilter = document.getElementById('tagFilter').value.toLowerCase();
+    let items = allWatchlist;
+    if (tagFilter) {
+        items = items.filter(w => (w.tags || '').toLowerCase().includes(tagFilter));
+    }
+
+    const tbody = document.querySelector('#watchlistTable tbody');
+    tbody.innerHTML = items.map(w => {
+        const changeCls = (w.change_pct || 0) >= 0 ? 'text-profit' : 'text-loss';
+        const nearCls = w.near_target ? 'near-target' : '';
+        const fmtDist = (d) => d !== null ? `${d >= 0 ? '+' : ''}${d}%` : '—';
+        return `<tr class="${nearCls}">
+            <td><strong>${w.ticker}</strong></td>
+            <td>${w.name}</td>
+            <td>${w.current_price ? '$' + w.current_price.toFixed(2) : '—'}</td>
+            <td class="${changeCls}">${w.change_pct !== null ? (w.change_pct >= 0 ? '+' : '') + w.change_pct.toFixed(2) + '%' : '—'}</td>
+            <td>${w.price_target_high ? '$' + w.price_target_high.toFixed(2) : '—'}</td>
+            <td>${w.price_target_low ? '$' + w.price_target_low.toFixed(2) : '—'}</td>
+            <td>${fmtDist(w.dist_to_high)}</td>
+            <td>${fmtDist(w.dist_to_low)}</td>
+            <td>${(w.tags || '').split(',').filter(Boolean).map(t => '<span class="badge bg-secondary me-1">' + t.trim() + '</span>').join('')}</td>
+            <td class="small">${w.notes || ''}</td>
+            <td><button class="btn btn-outline-danger btn-sm" onclick="deleteWatch(${w.id})">X</button></td>
+        </tr>`;
+    }).join('');
+}
+
+document.getElementById('tagFilter').addEventListener('input', filterAndRender);
+
+document.getElementById('watchForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    await fetch('/api/watchlist', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            ticker: document.getElementById('wTicker').value,
+            price_target_high: parseFloat(document.getElementById('wTargetHigh').value) || null,
+            price_target_low: parseFloat(document.getElementById('wTargetLow').value) || null,
+            tags: document.getElementById('wTags').value,
+            notes: document.getElementById('wNotes').value,
+        })
+    });
+    e.target.reset();
+    loadWatchlist();
+});
+
+async function deleteWatch(id) {
+    await fetch('/api/watchlist/' + id, { method: 'DELETE' });
+    loadWatchlist();
+}
+
+loadWatchlist();
+</script>
+{% endblock %}

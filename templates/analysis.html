@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+{% block title %}Technical Analysis — Iran Investment Tracker{% endblock %}
+
+{% block head %}
+<script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
+{% endblock %}
+
+{% block style %}
+#chartContainer { width: 100%; height: 400px; }
+#rsiChart { width: 100%; height: 150px; }
+#macdChart { width: 100%; height: 150px; }
+.indicator-toggle { cursor: pointer; user-select: none; }
+.indicator-toggle.active { font-weight: bold; }
+.news-bullish { border-left: 4px solid #27ae60; }
+.news-bearish { border-left: 4px solid #e74c3c; }
+.news-neutral { border-left: 4px solid #6c757d; }
+{% endblock %}
+
+{% block content %}
+<h2 class="mb-3">Technical Analysis</h2>
+
+<div class="row mb-3">
+    <div class="col-md-3">
+        <select id="tickerSelect" class="form-select">
+            {% for t in tickers %}
+            <option value="{{ t }}">{{ t }} — {{ ticker_meta[t].name }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="col-md-3">
+        <select id="periodSelect" class="form-select">
+            <option value="1mo">1 Month</option>
+            <option value="3mo">3 Months</option>
+            <option value="6mo" selected>6 Months</option>
+            <option value="1y">1 Year</option>
+        </select>
+    </div>
+    <div class="col-md-6">
+        <div class="btn-group btn-group-sm" role="group">
+            <button class="btn btn-outline-primary indicator-toggle active" data-ind="sma20">SMA 20</button>
+            <button class="btn btn-outline-primary indicator-toggle" data-ind="sma50">SMA 50</button>
+            <button class="btn btn-outline-info indicator-toggle" data-ind="bb">Bollinger</button>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-3">
+    <div class="card-body p-2">
+        <div id="chartContainer"></div>
+    </div>
+</div>
+
+<div class="row mb-3">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">RSI (14)</div>
+            <div class="card-body p-2"><div id="rsiChart"></div></div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">MACD</div>
+            <div class="card-body p-2"><div id="macdChart"></div></div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">News & Sentiment</div>
+    <div class="card-body" id="newsContainer">
+        <p class="text-muted">Select a ticker to load news...</p>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let mainChart, rsiChart, macdChart;
+let candleSeries, sma20Series, sma50Series, bbUpperSeries, bbLowerSeries;
+let rsiSeries, macdLineSeries, macdSignalSeries, macdHistSeries;
+let showSma20 = true, showSma50 = false, showBB = false;
+let currentData = [];
+
+function initCharts() {
+    mainChart = LightweightCharts.createChart(document.getElementById('chartContainer'), {
+        layout: { background: { color: '#fff' }, textColor: '#333' },
+        grid: { vertLines: { color: '#eee' }, horzLines: { color: '#eee' } },
+        timeScale: { timeVisible: false },
+    });
+    candleSeries = mainChart.addCandlestickSeries();
+    sma20Series = mainChart.addLineSeries({ color: '#2196F3', lineWidth: 1, title: 'SMA 20' });
+    sma50Series = mainChart.addLineSeries({ color: '#FF9800', lineWidth: 1, title: 'SMA 50', visible: false });
+    bbUpperSeries = mainChart.addLineSeries({ color: '#9C27B0', lineWidth: 1, lineStyle: 2, title: 'BB Upper', visible: false });
+    bbLowerSeries = mainChart.addLineSeries({ color: '#9C27B0', lineWidth: 1, lineStyle: 2, title: 'BB Lower', visible: false });
+
+    rsiChart = LightweightCharts.createChart(document.getElementById('rsiChart'), {
+        layout: { background: { color: '#fff' }, textColor: '#333' },
+        grid: { vertLines: { color: '#eee' }, horzLines: { color: '#eee' } },
+        timeScale: { timeVisible: false },
+    });
+    rsiSeries = rsiChart.addLineSeries({ color: '#E91E63', lineWidth: 1, title: 'RSI' });
+
+    macdChart = LightweightCharts.createChart(document.getElementById('macdChart'), {
+        layout: { background: { color: '#fff' }, textColor: '#333' },
+        grid: { vertLines: { color: '#eee' }, horzLines: { color: '#eee' } },
+        timeScale: { timeVisible: false },
+    });
+    macdLineSeries = macdChart.addLineSeries({ color: '#2196F3', lineWidth: 1, title: 'MACD' });
+    macdSignalSeries = macdChart.addLineSeries({ color: '#FF5722', lineWidth: 1, title: 'Signal' });
+    macdHistSeries = macdChart.addHistogramSeries({ title: 'Histogram' });
+}
+
+async function loadAnalysis() {
+    const ticker = document.getElementById('tickerSelect').value;
+    const period = document.getElementById('periodSelect').value;
+    const res = await fetch(`/api/analysis/${ticker}?period=${period}`);
+    const json = await res.json();
+
+    if (json.error) { alert(json.error); return; }
+    currentData = json.data;
+
+    const candles = currentData.map(d => ({ time: d.date, open: d.open, high: d.high, low: d.low, close: d.close }));
+    candleSeries.setData(candles);
+
+    const toLine = (key) => currentData.filter(d => d[key] !== null).map(d => ({ time: d.date, value: d[key] }));
+    sma20Series.setData(toLine('sma_20'));
+    sma50Series.setData(toLine('sma_50'));
+    bbUpperSeries.setData(toLine('bb_upper'));
+    bbLowerSeries.setData(toLine('bb_lower'));
+    rsiSeries.setData(toLine('rsi'));
+    macdLineSeries.setData(toLine('macd'));
+    macdSignalSeries.setData(toLine('macd_signal'));
+
+    const histData = currentData.filter(d => d.macd_hist !== null).map(d => ({
+        time: d.date, value: d.macd_hist,
+        color: d.macd_hist >= 0 ? '#27ae60' : '#e74c3c'
+    }));
+    macdHistSeries.setData(histData);
+
+    mainChart.timeScale().fitContent();
+    rsiChart.timeScale().fitContent();
+    macdChart.timeScale().fitContent();
+
+    updateVisibility();
+    loadNews(ticker);
+}
+
+function updateVisibility() {
+    sma20Series.applyOptions({ visible: showSma20 });
+    sma50Series.applyOptions({ visible: showSma50 });
+    bbUpperSeries.applyOptions({ visible: showBB });
+    bbLowerSeries.applyOptions({ visible: showBB });
+}
+
+async function loadNews(ticker) {
+    const container = document.getElementById('newsContainer');
+    container.innerHTML = '<p class="text-muted">Loading news...</p>';
+    try {
+        const res = await fetch(`/api/news/${ticker}`);
+        const json = await res.json();
+        if (!json.news.length) {
+            container.innerHTML = '<p class="text-muted">No recent news found.</p>';
+            return;
+        }
+        container.innerHTML = json.news.map(n => `
+            <div class="p-2 mb-2 news-${n.sentiment}">
+                <a href="${n.link}" target="_blank" class="text-decoration-none">${n.title}</a>
+                <div class="small text-muted">${n.publisher}
+                    <span class="badge badge-${n.sentiment}">${n.sentiment}</span>
+                </div>
+            </div>
+        `).join('');
+    } catch { container.innerHTML = '<p class="text-muted">Failed to load news.</p>'; }
+}
+
+document.querySelectorAll('.indicator-toggle').forEach(btn => {
+    btn.addEventListener('click', () => {
+        btn.classList.toggle('active');
+        const ind = btn.dataset.ind;
+        if (ind === 'sma20') showSma20 = !showSma20;
+        if (ind === 'sma50') showSma50 = !showSma50;
+        if (ind === 'bb') showBB = !showBB;
+        updateVisibility();
+    });
+});
+
+document.getElementById('tickerSelect').addEventListener('change', loadAnalysis);
+document.getElementById('periodSelect').addEventListener('change', loadAnalysis);
+
+initCharts();
+loadAnalysis();
+</script>
+{% endblock %}

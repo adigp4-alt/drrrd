@@ -9,8 +9,17 @@ projects:
       runtime: python
       repo: https://github.com/adigp4-alt/drrrd
       plan: free
-      envVars: []
+      envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false
+      - key: PRICE_FETCH_INTERVAL
+        value: "5"
+      - key: AUTO_SCAN_INTERVAL
+        value: "30"
       region: oregon
       buildCommand: pip install -r requirements.txt
-      startCommand: gunicorn main:app --bind 0.0.0.0:$PORT
+      startCommand: gunicorn main:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120
       autoDeployTrigger: commit
+      healthCheckPath: /health

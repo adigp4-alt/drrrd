@@ -1,0 +1,19 @@
+version: "3.8"
+
+services:
+  tracker:
+    build: .
+    ports:
+      - "${PORT:-5000}:5000"
+    environment:
+      - PORT=5000
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
+      - AUTO_SCAN_INTERVAL=${AUTO_SCAN_INTERVAL:-30}
+      - PRICE_FETCH_INTERVAL=${PRICE_FETCH_INTERVAL:-5}
+    volumes:
+      - tracker-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  tracker-data:

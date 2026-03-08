@@ -1,11 +1,24 @@
 """Tier configuration and ticker metadata."""
 
+import os
 from pathlib import Path
 
-DATA_DIR = Path("data")
+# Load .env file if python-dotenv is available (local dev)
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
+DATA_DIR = Path(os.environ.get("DATA_DIR", "data"))
 DATA_DIR.mkdir(exist_ok=True)
 SNAPSHOT_CSV = DATA_DIR / "snapshots.csv"
 DB_PATH = DATA_DIR / "tracker.db"
+
+# Scheduler intervals (configurable via environment)
+PRICE_FETCH_INTERVAL = int(os.environ.get("PRICE_FETCH_INTERVAL", "5"))
+AUTO_SCAN_INTERVAL = int(os.environ.get("AUTO_SCAN_INTERVAL", "30"))
+HISTORY_FETCH_HOURS = int(os.environ.get("HISTORY_FETCH_HOURS", "6"))
 
 TIERS = {
     "T1": {

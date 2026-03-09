@@ -1,8 +1,10 @@
 import yfinance as yf
+import logging
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
 # Initialize VADER globally so it doesn't reload the lexicon every function call
 analyzer = SentimentIntensityAnalyzer()
+logger = logging.getLogger(__name__)
 
 def analyze_ticker_sentiment(ticker):
     """

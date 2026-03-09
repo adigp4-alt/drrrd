@@ -1,6 +1,8 @@
 from flask import Blueprint, render_template, jsonify
 from app.data_fetcher import CACHE, fetch_history_data
 from app.indicators import compute_indicators, calculate_bullish_score
+from app.ml_predictor import predict_uptrend_probability
+from app.nlp_engine import analyze_ticker_sentiment, get_sentiment_label
 
 bp = Blueprint("screener", __name__, url_prefix="/screener")
 
@@ -19,9 +21,6 @@ def api_data():
         history_data = fetch_history_data(30)
         
     prices = CACHE.get("data", {})
-    
-    from app.ml_predictor import predict_uptrend_probability
-    from app.nlp_engine import analyze_ticker_sentiment, get_sentiment_label
 
     results = []
     for ticker, ohlcv in history_data.items():

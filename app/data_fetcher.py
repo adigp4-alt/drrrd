@@ -1,6 +1,7 @@
 """Yahoo Finance data fetching logic."""
 
 import csv
+import logging
 from datetime import datetime
 
 import yfinance as yf
@@ -8,6 +9,7 @@ import pandas as pd
 
 from app.config import ALL_TICKERS, TICKER_META, SNAPSHOT_CSV
 
+logger = logging.getLogger(__name__)
 
 # In-memory cache for live data
 CACHE = {"data": {}, "last_updated": None, "alerts": [], "history": {}}
@@ -15,13 +17,13 @@ CACHE = {"data": {}, "last_updated": None, "alerts": [], "history": {}}
 
 def fetch_prices():
     """Fetch current prices for all tickers."""
-    print(f"[{datetime.now():%H:%M:%S}] Fetching {len(ALL_TICKERS)} tickers...")
+    logger.info(f"[{datetime.now():%H:%M:%S}] Fetching {len(ALL_TICKERS)} tickers...")
     tickers_str = " ".join(ALL_TICKERS)
 
     try:
         raw = yf.download(tickers_str, period="5d", group_by="ticker", progress=False)
     except Exception as e:
-        print(f"  yfinance error: {e}")
+        logger.error(f"  yfinance error: {e}")
         return
 
     results = {}
@@ -73,12 +75,12 @@ def fetch_prices():
     CACHE["alerts"] = alerts
 
     _save_snapshot(results)
-    print(f"  Got {len(results)}/{len(ALL_TICKERS)} tickers, {len(alerts)} alerts")
+    logger.info(f"  Got {len(results)}/{len(ALL_TICKERS)} tickers, {len(alerts)} alerts")
 
 
 def fetch_history_data(days=30):
     """Fetch multi-day history for sparkline charts."""
-    print(f"  Fetching {days}-day history...")
+    logger.info(f"  Fetching {days}-day history...")
     tickers_str = " ".join(ALL_TICKERS)
     try:
         raw = yf.download(tickers_str, period=f"{days}d", group_by="ticker", progress=False)
@@ -94,9 +96,9 @@ def fetch_history_data(days=30):
             except Exception:
                 pass
         CACHE["history"] = history
-        print(f"  History loaded for {len(history)} tickers")
+        logger.info(f"  History loaded for {len(history)} tickers")
     except Exception as e:
-        print(f"  History fetch error: {e}")
+        logger.error(f"  History fetch error: {e}")
 
 
 def fetch_analysis_data(ticker, period="6mo"):
@@ -117,7 +119,7 @@ def fetch_analysis_data(ticker, period="6mo"):
             })
         return records
     except Exception as e:
-        print(f"  Analysis data error for {ticker}: {e}")
+        logger.error(f"  Analysis data error for {ticker}: {e}")
         return None
 
 

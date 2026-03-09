@@ -30,14 +30,6 @@ def create_app():
     app.register_blueprint(stat_arb.bp)
 
     # Startup: fetch data and start scheduler
-    print("\n".join([
-        "",
-        "====================================================",
-        "  IRAN INVESTMENT TRACKER — WEB SERVER",
-        "====================================================",
-        "",
-    ]))
-
     def _startup():
         fetch_prices()
         # Check custom alerts after fetching prices

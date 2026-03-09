@@ -11,4 +11,7 @@ def start_scheduler():
     scheduler.add_job(fetch_prices, "interval", minutes=5, id="price_fetch")
     scheduler.add_job(lambda: fetch_history_data(30), "interval", hours=6, id="history_fetch")
     scheduler.start()
-    print("Scheduler started: prices every 5 min, history every 6 hrs")
+    
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info("Scheduler started: prices every 5 min, history every 6 hrs")

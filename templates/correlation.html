@@ -76,7 +76,7 @@ async function loadCorrelation() {
             <td><strong>${p.ticker_a}</strong></td>
             <td><strong>${p.ticker_b}</strong></td>
             <td>${p.correlation.toFixed(3)}</td>
-            <td><span class="badge bg-warning text-dark">${p.warning}</span></td>
+            <td><span class="badge bg-warning">${p.warning}</span></td>
         </tr>`
     ).join('') || '<tr><td colspan="4" class="text-muted text-center">No highly correlated pairs found</td></tr>';
 

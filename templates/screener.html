@@ -46,6 +46,7 @@
                                 <th>Current Price</th>
                                 <th>Change (%)</th>
                                 <th>Bullish Score</th>
+                                <th>AI Forecast</th>
                                 <th>Trade Signal</th>
                                 <th>Confidence</th>
                                 <th>Action</th>
@@ -53,11 +54,11 @@
                         </thead>
                         <tbody id="screenerBody">
                             <tr>
-                                <td colspan="7" class="text-center py-5 text-muted">
+                                <td colspan="8" class="text-center py-5 text-muted">
                                     <div class="spinner-border text-primary" role="status">
                                         <span class="visually-hidden">Loading...</span>
                                     </div>
-                                    <div class="mt-2">Analyzing technicals for all tickers...</div>
+                                    <div class="mt-2">Analyzing technicals and running ML predictions...</div>
                                 </td>
                             </tr>
                         </tbody>
@@ -88,11 +89,11 @@
         const tbody = document.getElementById('screenerBody');
         tbody.innerHTML = `
             <tr>
-                <td colspan="7" class="text-center py-5 text-muted">
+                <td colspan="8" class="text-center py-5 text-muted">
                     <div class="spinner-border text-primary" role="status">
                         <span class="visually-hidden">Loading...</span>
                     </div>
-                    <div class="mt-2">Analyzing technicals for all tickers...</div>
+                    <div class="mt-2">Analyzing technicals and running ML predictions...</div>
                 </td>
             </tr>
         `;
@@ -103,7 +104,7 @@
                 tbody.innerHTML = '';
                 
                 if(data.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4">No data available. Please wait for the initial fetch to complete.</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="8" class="text-center py-4">No data available. Please wait for the initial fetch to complete.</td></tr>';
                     return;
                 }
 
@@ -111,6 +112,8 @@
                     const changeClass = (typeof item.change_pct === 'number' && item.change_pct >= 0) ? 'text-success' : 'text-danger';
                     const changeVal = (typeof item.change_pct === 'number') ? item.change_pct.toFixed(2) + '%' : 'N/A';
                     
+                    const aiClass = item.ai_prob_num >= 65 ? 'text-success fw-bold' : (item.ai_prob_num <= 35 ? 'text-danger fw-bold' : '');
+
                     const row = document.createElement('tr');
                     
                     row.innerHTML = `
@@ -127,6 +130,10 @@
                                 </div>
                             </div>
                         </td>
+                        <td class="${aiClass}">
+                            <i class="fas ${item.ai_prob_num >= 50 ? 'fa-arrow-trend-up' : 'fa-arrow-trend-down'} me-1"></i>
+                            ${item.ai_forecast}
+                        </td>
                         <td>
                             <span class="badge rounded-pill ${getSignalBadgeClass(item.signal)}">${item.signal}</span>
                         </td>
@@ -140,7 +147,7 @@
             })
             .catch(err => {
                 console.error("Error fetching screener data:", err);
-                tbody.innerHTML = '<tr><td colspan="7" class="text-danger text-center py-4">Error loading screener data. Ensure the server is running.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="8" class="text-danger text-center py-4">Error loading screener data. Ensure the server is running.</td></tr>';
             });
     }
 

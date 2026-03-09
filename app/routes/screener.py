@@ -20,14 +20,20 @@ def api_data():
         
     prices = CACHE.get("data", {})
     
+    from app.ml_predictor import predict_uptrend_probability
+
     results = []
     for ticker, ohlcv in history_data.items():
         if not ohlcv:
             continue
             
-        # Compute indicators
+        # Compute technical indicators
         records_with_inds = compute_indicators(ohlcv)
         score, signal = calculate_bullish_score(records_with_inds)
+        
+        # Compute ML Probability
+        ai_prob = predict_uptrend_probability(ohlcv)
+        ai_forecast_display = f"{ai_prob}%" if ai_prob is not None else "N/A"
         
         current_price = prices.get(ticker, {}).get("price", "N/A")
         change_pct = prices.get(ticker, {}).get("change_pct", "N/A")
@@ -46,7 +52,9 @@ def api_data():
             "change_pct": change_pct,
             "score": score,
             "signal": signal,
-            "confidence": confidence
+            "confidence": confidence,
+            "ai_forecast": ai_forecast_display,
+            "ai_prob_num": ai_prob if ai_prob is not None else 50.0
         })
         
     # Sort by score descending (Strong Buys at the top)

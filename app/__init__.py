@@ -18,7 +18,7 @@ def create_app():
     init_db()
 
     # Register blueprints
-    from app.routes import dashboard, portfolio, analysis, alerts_api, watchlist, export, screener
+    from app.routes import dashboard, portfolio, analysis, alerts_api, watchlist, export, screener, backtest
     app.register_blueprint(dashboard.bp)
     app.register_blueprint(portfolio.bp)
     app.register_blueprint(analysis.bp)
@@ -26,6 +26,7 @@ def create_app():
     app.register_blueprint(watchlist.bp)
     app.register_blueprint(export.bp)
     app.register_blueprint(screener.bp)
+    app.register_blueprint(backtest.bp)
 
     # Startup: fetch data and start scheduler
     print("\n".join([

@@ -15,10 +15,11 @@ def index():
 def api_data():
     """Returns JSON payload of all tracked assets with their bullish scores."""
     # Ensure we have recent history data
-    history_data = CACHE.get("history_data_30d", {})
+    history_data = CACHE.get("history", {})
     if not history_data:
-        # Fallback if scheduler hasn't run it
-        history_data = fetch_history_data(30)
+        import threading
+        threading.Thread(target=fetch_history_data, args=(30,), daemon=True).start()
+        return jsonify([])
         
     prices = CACHE.get("data", {})
 

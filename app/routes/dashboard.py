@@ -30,9 +30,11 @@ def api_history():
     return jsonify(CACHE.get("history", {}))
 
 
+import threading
+
 @bp.route("/api/refresh", methods=["POST"])
 def api_refresh():
-    fetch_prices()
+    threading.Thread(target=fetch_prices, daemon=True).start()
     return jsonify({"status": "ok", "last_updated": CACHE["last_updated"]})
 
 

@@ -24,7 +24,7 @@ def fetch_prices():
         raw = yf.download(tickers_str, period="5d", group_by="ticker", progress=False)
     except Exception as e:
         logger.error(f"  yfinance error: {e}")
-        return
+        return {}
 
     results = {}
     alerts = []
@@ -76,6 +76,7 @@ def fetch_prices():
 
     _save_snapshot(results)
     logger.info(f"  Got {len(results)}/{len(ALL_TICKERS)} tickers, {len(alerts)} alerts")
+    return results
 
 
 def fetch_history_data(days=30):
@@ -97,8 +98,10 @@ def fetch_history_data(days=30):
                 pass
         CACHE["history"] = history
         logger.info(f"  History loaded for {len(history)} tickers")
+        return history
     except Exception as e:
         logger.error(f"  History fetch error: {e}")
+        return {}
 
 
 def fetch_analysis_data(ticker, period="6mo"):

@@ -50,13 +50,28 @@
     </div>
 </div>
 
-<div class="card mb-3 border-success shadow-sm">
-    <div class="card-header bg-success text-white">
-        <i class="fas fa-robot me-1"></i> Prophet AI: 30-Day Personalized Forecast 
-        <small class="float-end pt-1" style="font-size: 0.75rem; opacity: 0.8;">Powered by Meta Open Source</small>
+<div class="row mb-3">
+    <div class="col-md-8">
+        <div class="card border-success shadow-sm h-100">
+            <div class="card-header bg-success text-white">
+                <i class="fas fa-robot me-1"></i> Prophet AI: 30-Day Personalized Forecast 
+                <span id="prophetAccuracyBadge" class="badge bg-light text-success ms-2" style="display:none;"></span>
+                <small class="float-end pt-1" style="font-size: 0.75rem; opacity: 0.8;">Powered by Meta Open Source</small>
+            </div>
+            <div class="card-body p-2" style="position: relative; height:350px;">
+                <canvas id="prophetChart"></canvas>
+            </div>
+        </div>
     </div>
-    <div class="card-body p-2" style="position: relative; height:350px;">
-        <canvas id="prophetChart"></canvas>
+    <div class="col-md-4">
+        <div class="card border-info shadow-sm h-100">
+            <div class="card-header bg-info text-white">
+                <i class="fas fa-brain me-1"></i> Explainable AI Rationale
+            </div>
+            <div class="card-body p-3" id="rationaleContainer">
+                <p class="text-muted text-center mt-5">Loading feature importance...</p>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -153,9 +168,17 @@ async function loadAnalysis() {
     macdChart.timeScale().fitContent();
 
     // Render Prophet Chart
+    const accuracyBadge = document.getElementById('prophetAccuracyBadge');
     if (json.prophet_forecast) {
+        if (json.prophet_forecast.accuracy_score) {
+            accuracyBadge.textContent = `Historical Accuracy: ${json.prophet_forecast.accuracy_score}`;
+            accuracyBadge.style.display = 'inline-block';
+        } else {
+            accuracyBadge.style.display = 'none';
+        }
         renderProphetChart(json.prophet_forecast, ticker);
     } else {
+        accuracyBadge.style.display = 'none';
         if (prophetChartJs) prophetChartJs.destroy();
         const ctx = document.getElementById('prophetChart').getContext('2d');
         ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
@@ -163,6 +186,29 @@ async function loadAnalysis() {
         ctx.fillStyle = "#666";
         ctx.textAlign = "center";
         ctx.fillText("Insufficient data for Prophet forecasting", ctx.canvas.width/2, ctx.canvas.height/2);
+    }
+    
+    // Render AI Rationale (Feature Importance)
+    const rationaleContainer = document.getElementById('rationaleContainer');
+    if (json.ai_rationale && Object.keys(json.ai_rationale).length > 0) {
+        let html = '<h6 class="mb-3">Top Driving Factors:</h6>';
+        for (const [feature, importance] of Object.entries(json.ai_rationale)) {
+            const widthPct = importance; // It's already a string with '%'
+            html += `
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between mb-1">
+                        <span class="small fw-bold">${feature}</span>
+                        <span class="small text-muted">${importance} weight</span>
+                    </div>
+                    <div class="progress" style="height: 8px;">
+                        <div class="progress-bar bg-info" role="progressbar" style="width: ${widthPct}"></div>
+                    </div>
+                </div>
+            `;
+        }
+        rationaleContainer.innerHTML = html;
+    } else {
+        rationaleContainer.innerHTML = '<p class="text-muted text-center mt-5">Rationale not available for this ticker.</p>';
     }
 
     updateVisibility();

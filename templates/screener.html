@@ -44,13 +44,13 @@
                             <tr>
                                 <th>Ticker</th>
                                 <th>Current Price</th>
-                                <th>Change (%)</th>
                                 <th>Bullish Score</th>
-                                <th>AI Forecast</th>
+                                <th>AI Forecast & Explained Rationale</th>
                                 <th>NLP Sentiment</th>
                                 <th>Kelly Allocation</th>
+                                <th>Jury Consensus</th>
                                 <th>Trade Signal</th>
-                                <th>Confidence</th>
+                                <th>Conviction</th>
                                 <th>Action</th>
                             </tr>
                         </thead>
@@ -126,12 +126,27 @@
 
                     const kellyClass = item.kelly_fraction > 0 ? 'text-success fw-bold' : 'text-muted';
 
+                    // Build Explainable AI rationale string (Top 2 factors)
+                    let rationaleHtml = '';
+                    if (item.ai_rationale && Object.keys(item.ai_rationale).length > 0) {
+                        const top2 = Object.entries(item.ai_rationale).slice(0, 2);
+                        rationaleHtml = '<div class="mt-1 small text-muted border-top pt-1 text-start d-inline-block">';
+                        top2.forEach(([feature, imp]) => {
+                            rationaleHtml += `<div><i class="fas fa-check-circle text-info" style="font-size: 0.6rem;"></i> ${feature} (${imp})</div>`;
+                        });
+                        rationaleHtml += '</div>';
+                    } else {
+                        rationaleHtml = '<div class="mt-1 small text-muted border-top pt-1">No rationale</div>';
+                    }
+
                     const row = document.createElement('tr');
                     
                     row.innerHTML = `
                         <td class="fw-bold fs-5">${item.ticker}</td>
-                        <td>${item.price.toLocaleString()}</td>
-                        <td class="fw-medium ${changeClass}">${changeVal}</td>
+                        <td>
+                            <div>${item.price.toLocaleString()}</div>
+                            <small class="fw-medium ${changeClass}">${changeVal}</small>
+                        </td>
                         <td>
                             <div class="d-flex align-items-center">
                                 <span class="fs-5 me-2 ${getScoreClass(item.score)}">${item.score}</span>
@@ -143,11 +158,14 @@
                             </div>
                         </td>
                         <td>
-                            <span class="${aiClass}">
-                                <i class="fas ${item.ai_prob_num >= 50 ? 'fa-arrow-trend-up' : 'fa-arrow-trend-down'} me-1"></i>
-                                ${item.ai_forecast}
-                            </span><br>
-                            <small class="${regimeClass}">${item.market_regime}</small>
+                            <div class="text-center mb-1">
+                                <span class="${aiClass}">
+                                    <i class="fas ${item.ai_prob_num >= 50 ? 'fa-arrow-trend-up' : 'fa-arrow-trend-down'} me-1"></i>
+                                    ${item.ai_forecast}
+                                </span><br>
+                                <small class="${regimeClass}">${item.market_regime}</small>
+                            </div>
+                            ${rationaleHtml}
                         </td>
                         <td>
                             <div class="d-flex align-items-center ${nlpTextClass}">
@@ -162,12 +180,15 @@
                             ${item.kelly_display !== 'N/A' ? '<i class="fas fa-coins me-1"></i>' : ''}
                             ${item.kelly_display}
                         </td>
+                        <td class="fw-bold text-secondary">
+                            <i class="fas fa-gavel"></i> ${item.consensus}
+                        </td>
                         <td>
                             <span class="badge rounded-pill ${getSignalBadgeClass(item.signal)}">${item.signal === 'SUPER BUY' ? '<i class="fas fa-bolt text-warning"></i> SUPER BUY' : (item.signal === 'SUPER SELL' ? '<i class="fas fa-bolt text-warning"></i> SUPER SELL' : item.signal)}</span>
                         </td>
-                        <td>${item.confidence}</td>
+                        <td class="fw-bold">${item.confidence === 'High' ? '<span class="text-success"><i class="fas fa-shield-alt"></i> High</span>' : (item.confidence === 'Medium' ? '<span class="text-warning">Medium</span>' : '<span class="text-danger">Low</span>')}</td>
                         <td>
-                            <a href="/analysis?ticker=${item.ticker}" class="btn btn-sm btn-outline-secondary">View Chart</a>
+                            <a href="/analysis?ticker=${item.ticker}" class="btn btn-sm btn-outline-secondary">Details</a>
                         </td>
                     `;
                     tbody.appendChild(row);

@@ -36,6 +36,10 @@ def api_analysis(ticker):
     
     # Generate the 30-day AI trajectory
     prophet_forecast = generate_prophet_forecast(ohlcv, days_ahead=30)
+    
+    # Generate the Machine Learning driving rationale (Feature Importance)
+    from app.ml_predictor import predict_uptrend_probability
+    ai_prob, regime, rationale = predict_uptrend_probability(ohlcv)
 
     return jsonify({
         "ticker": ticker,
@@ -43,7 +47,8 @@ def api_analysis(ticker):
         "tier": meta["tier"],
         "period": period,
         "data": data_with_indicators,
-        "prophet_forecast": prophet_forecast
+        "prophet_forecast": prophet_forecast,
+        "ai_rationale": rationale if rationale else {}
     })
 
 

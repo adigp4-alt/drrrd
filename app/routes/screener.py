@@ -32,8 +32,8 @@ def api_data():
         records_with_inds = compute_indicators(ohlcv)
         score, signal = calculate_bullish_score(records_with_inds)
         
-        # 2. AI Probabilistic Forecasting & Regime Detection
-        ai_prob, market_regime = predict_uptrend_probability(ohlcv)
+        # 2. AI Probabilistic Forecasting, Regime Detection & Explainability
+        ai_prob, market_regime, ai_rationale = predict_uptrend_probability(ohlcv)
         
         if ai_prob is not None:
              ai_forecast_display = f"{ai_prob}% probability of +5D uptrend"
@@ -42,6 +42,8 @@ def api_data():
              
         if not market_regime:
              market_regime = "Unknown Regime"
+        if not ai_rationale:
+             ai_rationale = {}
         
         # Compute NLP Sentiment
         nlp_score = analyze_ticker_sentiment(ticker)
@@ -50,21 +52,39 @@ def api_data():
         current_price = prices.get(ticker, {}).get("price", "N/A")
         change_pct = prices.get(ticker, {}).get("change_pct", "N/A")
         
-        # Add a confidence indicator based on how strong the signal is
-        if signal in ["Strong Buy", "Strong Sell"]:
-            confidence = "High"
-        elif signal in ["Buy", "Sell"]:
-            confidence = "Medium"
-        else:
-            confidence = "Low"
-            
-        # Optional: Adjust the 'Super Signal' by combining ML and NLP
-        if nlp_score > 0.4 and ai_prob is not None and ai_prob > 60:
-            super_signal = "SUPER BUY"
-        elif nlp_score < -0.4 and ai_prob is not None and ai_prob < 40:
-            super_signal = "SUPER SELL"
+        # ENSEMBLE CONSENSUS SCORE
+        # Combine Technicals, Machine Learning, and NLP into a Jury Consensus
+        consensus = "Neutral"
+        conviction = "Low"
+        super_signal = signal # Fallback to technical signal
+        
+        is_tech_bullish = signal in ["Buy", "Strong Buy"]
+        is_tech_bearish = signal in ["Sell", "Strong Sell"]
+        is_ml_bullish = ai_prob is not None and ai_prob > 60.0
+        is_ml_bearish = ai_prob is not None and ai_prob < 40.0
+        is_nlp_bullish = nlp_score > 0.2
+        is_nlp_bearish = nlp_score < -0.2
+        
+        if is_tech_bullish and is_ml_bullish and is_nlp_bullish:
+            super_signal = "STRONG BUY"
+            consensus = "Bullish Consensus"
+            conviction = "High"
+        elif is_tech_bearish and is_ml_bearish and is_nlp_bearish:
+            super_signal = "STRONG SELL"
+            consensus = "Bearish Consensus"
+            conviction = "High"
+        elif is_tech_bullish and (is_ml_bullish or is_nlp_bullish):
+            super_signal = "Buy"
+            consensus = "Leaning Bullish"
+            conviction = "Medium"
+        elif is_tech_bearish and (is_ml_bearish or is_nlp_bearish):
+            super_signal = "Sell"
+            consensus = "Leaning Bearish"
+            conviction = "Medium"
         else:
             super_signal = signal
+            consensus = "Mixed Signals"
+            conviction = "Low"
 
         # Calculate Kelly Criterion fraction if it's a Buy signal
         # Kelly = W - ((1 - W) / R)
@@ -94,9 +114,11 @@ def api_data():
             "change_pct": change_pct,
             "score": score,
             "signal": super_signal,
-            "confidence": confidence,
+            "confidence": conviction,
+            "consensus": consensus,
             "ai_forecast": ai_forecast_display,
             "ai_prob_num": ai_prob if ai_prob is not None else 50.0,
+            "ai_rationale": ai_rationale,
             "nlp_score": nlp_score,
             "nlp_label": nlp_label,
             "kelly_fraction": kelly_fraction,

@@ -31,8 +31,31 @@ def generate_prophet_forecast(history_records, days_ahead=30):
             'y': df['close']
         })
         
-        # Initialize the model with yearly and weekly seasonality
-        # We disable daily seasonality since we only have daily close data
+        # HISTORICAL ACCURACY (MAPE)
+        # To show confidence, we run a mini-backtest on the last 30 days
+        mape = None
+        if len(prophet_df) > 60:
+            # Train on everything except last 30 days
+            train_df = prophet_df.iloc[:-30]
+            test_df = prophet_df.iloc[-30:]
+            
+            test_model = Prophet(daily_seasonality=False, weekly_seasonality=True, yearly_seasonality=True)
+            # Suppress Prophet logs for the test model
+            logging.getLogger('cmdstanpy').setLevel(logging.ERROR)
+            test_model.fit(train_df)
+            
+            # Predict the 30 days we held out
+            future_test = test_model.make_future_dataframe(periods=30, freq='B')
+            # Prophet might generate more than 30 rows if there are weekends, so we inner join with test_df on 'ds'
+            forecast_test = test_model.predict(future_test)
+            merged = pd.merge(test_df, forecast_test[['ds', 'yhat']], on='ds')
+            
+            if len(merged) > 0:
+                # Mean Absolute Percentage Error
+                error_pcts = abs((merged['y'] - merged['yhat']) / merged['y'])
+                mape = error_pcts.mean()
+        
+        # Now train the MAIN model on ALL data for the actual future forecast
         model = Prophet(
             daily_seasonality=False,
             weekly_seasonality=True,
@@ -57,13 +80,18 @@ def generate_prophet_forecast(history_records, days_ahead=30):
         last_hist_date = prophet_df['ds'].max()
         future_forecast = forecast[forecast['ds'] > last_hist_date]
         
+        mape_display = f"{(1 - mape) * 100:.1f}%" if mape is not None else "N/A"
+        
+        mape_display = f"{max(0, (1 - mape)) * 100:.1f}%" if mape is not None else "N/A"
+        
         payload = {
             "dates": historical_dates,
             "historical_prices": historical_prices,
             "forecast_dates": future_forecast['ds'].dt.strftime('%Y-%m-%d').tolist(),
             "yhat": [round(val, 2) for val in future_forecast['yhat'].tolist()],
             "yhat_lower": [round(val, 2) for val in future_forecast['yhat_lower'].tolist()],
-            "yhat_upper": [round(val, 2) for val in future_forecast['yhat_upper'].tolist()]
+            "yhat_upper": [round(val, 2) for val in future_forecast['yhat_upper'].tolist()],
+            "accuracy_score": mape_display
         }
         
         return payload

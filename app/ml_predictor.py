@@ -107,7 +107,7 @@ def predict_uptrend_probability(history_records):
         X, y, latest_features = prepare_ml_data(history_records, prediction_horizon=5)
         
         if X is None or len(X) < 10 or len(np.unique(y)) < 2:
-            return None, "Not Enough Data"
+            return None, "Not Enough Data", None
             
         # 1. Unsupervised Market Regime Detection (Clustering)
         # We look at recent Volatility and Return to cluster the environment into 2 regimes
@@ -166,8 +166,25 @@ def predict_uptrend_probability(history_records):
         if len(proba) == 2:
             prob_val = round(proba[1] * 100, 1) # Return % chance of going up
             
-        return prob_val, regime_label
+        # 3. Explainable AI (XAI): Feature Importance
+        # Extract the relative importance of each feature from the Random Forest
+        feature_names = ['RSI', 'MACD Histogram', 'Bollinger Width', 'Distance to SMA 20', 
+                        '10-Day Volatility', 'Daily Return', '1-Day Lag Return', '2-Day Lag Return',
+                        'ATR (True Range)', '10-Day Rate of Change']
+        
+        # Ensure the RF model is fitted before extracting importances
+        # The VotingClassifier fits its estimators internally. We can access the fitted RF:
+        fitted_rf = ensemble.named_estimators_['rf']
+        importances = fitted_rf.feature_importances_
+        
+        # Zip features with importances, sort by importance descending, take top 5
+        feat_imp_list = sorted(zip(feature_names, importances), key=lambda x: x[1], reverse=True)[:5]
+        
+        # Convert to dictionary with percentage strings
+        rationale = {name: f"{round(imp * 100, 1)}%" for name, imp in feat_imp_list}
+            
+        return prob_val, regime_label, rationale
         
     except Exception as e:
         print(f"ML/Regime Prediction Error: {e}")
-        return None, "Error Computing Regime"
+        return None, "Error Computing Regime", None

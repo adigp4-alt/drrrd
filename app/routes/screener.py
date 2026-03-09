@@ -21,6 +21,7 @@ def api_data():
     prices = CACHE.get("data", {})
     
     from app.ml_predictor import predict_uptrend_probability
+    from app.nlp_engine import analyze_ticker_sentiment, get_sentiment_label
 
     results = []
     for ticker, ohlcv in history_data.items():
@@ -35,6 +36,10 @@ def api_data():
         ai_prob = predict_uptrend_probability(ohlcv)
         ai_forecast_display = f"{ai_prob}%" if ai_prob is not None else "N/A"
         
+        # Compute NLP Sentiment
+        nlp_score = analyze_ticker_sentiment(ticker)
+        nlp_label = get_sentiment_label(nlp_score)
+        
         current_price = prices.get(ticker, {}).get("price", "N/A")
         change_pct = prices.get(ticker, {}).get("change_pct", "N/A")
         
@@ -46,15 +51,49 @@ def api_data():
         else:
             confidence = "Low"
             
+        # Optional: Adjust the 'Super Signal' by combining ML and NLP
+        if nlp_score > 0.4 and ai_prob is not None and ai_prob > 60:
+            super_signal = "SUPER BUY"
+        elif nlp_score < -0.4 and ai_prob is not None and ai_prob < 40:
+            super_signal = "SUPER SELL"
+        else:
+            super_signal = signal
+
+        # Calculate Kelly Criterion fraction if it's a Buy signal
+        # Kelly = W - ((1 - W) / R)
+        # W = Win probability (from our AI forecast)
+        # R = Expected Reward/Risk ratio (We'll assume a conservative 1.5 for this strategy)
+        kelly_fraction = 0.0
+        kelly_display = "N/A"
+        
+        if ai_prob is not None and ai_prob > 50 and super_signal in ["Buy", "Strong Buy", "SUPER BUY"]:
+            w = ai_prob / 100.0
+            r = 1.5
+            k = w - ((1.0 - w) / r)
+            
+            # Half-Kelly is often used in practice to reduce volatility
+            half_kelly = k / 2.0
+            
+            # Cap maximum allocation at 25% of bankroll to prevent ruin, floor at 0%
+            final_kelly = max(0.0, min(0.25, half_kelly))
+            
+            if final_kelly > 0:
+                kelly_fraction = final_kelly
+                kelly_display = f"{final_kelly * 100:.1f}%"
+
         results.append({
             "ticker": ticker,
             "price": current_price,
             "change_pct": change_pct,
             "score": score,
-            "signal": signal,
+            "signal": super_signal,
             "confidence": confidence,
             "ai_forecast": ai_forecast_display,
-            "ai_prob_num": ai_prob if ai_prob is not None else 50.0
+            "ai_prob_num": ai_prob if ai_prob is not None else 50.0,
+            "nlp_score": nlp_score,
+            "nlp_label": nlp_label,
+            "kelly_fraction": kelly_fraction,
+            "kelly_display": kelly_display
         })
         
     # Sort by score descending (Strong Buys at the top)

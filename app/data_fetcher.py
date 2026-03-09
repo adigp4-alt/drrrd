@@ -8,8 +8,18 @@ import yfinance as yf
 import pandas as pd
 
 from app.config import ALL_TICKERS, TICKER_META, SNAPSHOT_CSV
+import requests
 
 logger = logging.getLogger(__name__)
+
+# Stealth Session for Yahoo Finance to bypass Cloud/Shared IP blocks constraints
+# by impersonating a generic Windows 11 Chrome browser instead of the python requests library
+yf_session = requests.Session()
+yf_session.headers.update({
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+    "Accept": "*/*",
+    "Connection": "keep-alive"
+})
 
 # In-memory cache for live data
 CACHE = {"data": {}, "last_updated": None, "alerts": [], "history": {}}
@@ -21,7 +31,7 @@ def fetch_prices():
     tickers_str = " ".join(ALL_TICKERS)
 
     try:
-        raw = yf.download(tickers_str, period="5d", group_by="ticker", progress=False)
+        raw = yf.download(tickers_str, period="5d", group_by="ticker", progress=False, session=yf_session)
     except Exception as e:
         logger.error(f"  yfinance error: {e}")
         return {}
@@ -84,7 +94,7 @@ def fetch_history_data(days=30):
     logger.info(f"  Fetching {days}-day history...")
     tickers_str = " ".join(ALL_TICKERS)
     try:
-        raw = yf.download(tickers_str, period=f"{days}d", group_by="ticker", progress=False)
+        raw = yf.download(tickers_str, period=f"{days}d", group_by="ticker", progress=False, session=yf_session)
         history = {}
         for sym in ALL_TICKERS:
             try:
@@ -107,7 +117,7 @@ def fetch_history_data(days=30):
 def fetch_analysis_data(ticker, period="6mo"):
     """Fetch OHLCV data for technical analysis."""
     try:
-        df = yf.download(ticker, period=period, progress=False)
+        df = yf.download(ticker, period=period, progress=False, session=yf_session)
         if df.empty:
             return None
             

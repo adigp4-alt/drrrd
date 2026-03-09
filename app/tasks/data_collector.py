@@ -1,4 +1,5 @@
 import logging
+import time
 from datetime import datetime
 from app.config import ALL_TICKERS
 from app.data_fetcher import fetch_analysis_data
@@ -23,6 +24,9 @@ def run_daily_ai_collection():
     
     for ticker in ALL_TICKERS:
         try:
+            # Artificial rate-limiting delay to prevent Cloud/Shared IP bans
+            time.sleep(2)
+            
             # 1. Fetch minimum data
             ohlcv = fetch_analysis_data(ticker, "6mo")
             if not ohlcv or len(ohlcv) < 30:

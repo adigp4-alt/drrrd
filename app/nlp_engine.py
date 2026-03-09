@@ -14,8 +14,10 @@ def analyze_ticker_sentiment(ticker):
     Returns: A float between -1 (Extremely Bearish) and 1 (Extremely Bullish)
     """
     try:
+        from app.data_fetcher import yf_session
+        
         # yf.Ticker(ticker).news fetches a list of ~8 recent news dictionaries
-        ticker_obj = yf.Ticker(ticker)
+        ticker_obj = yf.Ticker(ticker, session=yf_session)
         news_items = ticker_obj.news
         
         if not news_items:

@@ -103,3 +103,54 @@ def delete_holding(holding_id):
     with get_db() as db:
         db.execute("DELETE FROM holdings WHERE id = ?", (holding_id,))
     return jsonify({"status": "deleted"})
+
+
+@bp.route("/api/portfolio/optimize", methods=["GET"])
+def optimize_portfolio_route():
+    import pandas as pd
+    from app.optimizer import optimize_portfolio
+    from app.data_fetcher import fetch_history_data
+    
+    holdings = query_db("SELECT DISTINCT ticker FROM holdings")
+    tickers = [h["ticker"] for h in holdings]
+    
+    if len(tickers) < 2:
+        return jsonify({"error": "Need at least 2 distinct assets to optimize"}), 400
+        
+    # Get 1 year of data for better covariance estimates
+    history_data = fetch_history_data(365)
+    
+    # Build dataframe of daily returns
+    returns_dict = {}
+    for ticker in tickers:
+        data = history_data.get(ticker, [])
+        if not data:
+            continue
+        # Convert to pandas series
+        df = pd.DataFrame(data)
+        if df.empty or 'close' not in df.columns:
+            continue
+        df['date'] = pd.to_datetime(df['date'])
+        df.set_index('date', inplace=True)
+        # Calculate daily percentage change
+        returns_dict[ticker] = df['close'].pct_change().dropna()
+        
+    if len(returns_dict) < 2:
+        return jsonify({"error": "Not enough historical data for these assets"}), 400
+        
+    # Combine into single dataframe
+    returns_df = pd.DataFrame(returns_dict)
+    
+    # Fill missing values with 0
+    returns_df.fillna(0, inplace=True)
+    
+    # Run optimizer
+    optimal_weights = optimize_portfolio(list(returns_dict.keys()), returns_df)
+    
+    # Convert weights to percentages
+    results = [{"ticker": k, "optimal_allocation": round(v * 100, 2)} for k, v in optimal_weights.items()]
+    
+    # Sort by allocation descending
+    results = sorted(results, key=lambda x: x["optimal_allocation"], reverse=True)
+    
+    return jsonify({"optimized_portfolio": results})

@@ -133,3 +133,87 @@ def compute_indicators(ohlcv_records):
             "bb_lower": bb_lower[i],
         })
     return result
+
+
+def calculate_bullish_score(history_records):
+    """
+    Given historical OHLCV data that has ALREADY run through compute_indicators, 
+    evaluate the latest data point to generate a Bullish Score (0-100) and a Trade Signal.
+    """
+    if not history_records or len(history_records) < 2:
+        return 50, "Hold"
+
+    latest = history_records[-1]
+    prev = history_records[-2]
+    
+    score = 50
+    
+    # 1. RSI (0-100 scale, generally <30 is oversold/bullish, >70 is overbought/bearish)
+    rsi_val = latest.get("rsi")
+    if rsi_val is not None:
+        if rsi_val < 30:
+            score += 20
+        elif rsi_val < 45:
+            score += 10
+        elif rsi_val > 70:
+            score -= 20
+        elif rsi_val > 55:
+            score -= 10
+            
+    # 2. MACD Crossover
+    macd_val = latest.get("macd")
+    macd_sig = latest.get("macd_signal")
+    prev_macd = prev.get("macd")
+    prev_sig = prev.get("macd_signal")
+    
+    if None not in (macd_val, macd_sig, prev_macd, prev_sig):
+        if macd_val > macd_sig and prev_macd <= prev_sig:
+            score += 15 # Bullish crossover
+        elif macd_val > macd_sig:
+            score += 5  # Bullish trend
+        elif macd_val < macd_sig and prev_macd >= prev_sig:
+            score -= 15 # Bearish crossover
+        elif macd_val < macd_sig:
+            score -= 5  # Bearish trend
+
+    # 3. Simple Moving Averages (Trending)
+    close = latest.get("close", 0)
+    sma_20 = latest.get("sma_20")
+    sma_50 = latest.get("sma_50")
+    
+    if sma_20 and close > sma_20:
+        score += 10
+    elif sma_20 and close < sma_20:
+        score -= 10
+        
+    if sma_50 and close > sma_50:
+        score += 5
+    elif sma_50 and close < sma_50:
+        score -= 5
+
+    # 4. Bollinger Bands (Mean reversion)
+    bb_lower = latest.get("bb_lower")
+    bb_upper = latest.get("bb_upper")
+    
+    if bb_lower and close <= bb_lower * 1.02: # Within 2% of lower band
+        score += 15
+    elif bb_upper and close >= bb_upper * 0.98: # Within 2% of upper band
+        score -= 15
+
+    # Clamp score
+    score = max(0, min(100, score))
+    
+    # Assign signal
+    if score >= 80:
+        signal = "Strong Buy"
+    elif score >= 60:
+        signal = "Buy"
+    elif score <= 20:
+        signal = "Strong Sell"
+    elif score <= 40:
+        signal = "Sell"
+    else:
+        signal = "Hold"
+        
+    return score, signal
+

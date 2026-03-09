@@ -54,9 +54,51 @@
             </div>
         </div>
         <div class="card">
-            <div class="card-header">Allocation</div>
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>Allocation</span>
+                <button class="btn btn-sm btn-outline-success" onclick="optimizePortfolio()">
+                    <i class="fas fa-magic"></i> Optimize
+                </button>
+            </div>
             <div class="card-body">
                 <canvas id="allocChart" height="250"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Optimization Modal -->
+<div class="modal fade" id="optimizeModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-chart-pie"></i> Portfolio Optimization</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small">
+                    Using Modern Portfolio Theory (MPT), this tool analyzes the historical volatility and correlation of your current holdings to suggest an allocation that maximizes your expected return for a given level of risk (highest Sharpe Ratio).
+                </p>
+                
+                <div id="optimizeLoading" class="text-center py-4 d-none">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <div class="mt-2">Running historical analysis & generating efficient frontier...</div>
+                </div>
+                
+                <div id="optimizeError" class="alert alert-danger d-none mt-2"></div>
+                
+                <div id="optimizeResults" class="d-none">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6 class="text-center mb-3">Current Allocation</h6>
+                            <canvas id="currentAllocChart" height="200"></canvas>
+                        </div>
+                        <div class="col-md-6">
+                            <h6 class="text-center mb-3 text-success">Optimized Allocation</h6>
+                            <canvas id="optimalAllocChart" height="200"></canvas>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -67,9 +109,12 @@
 <script>
 let allocChart = null;
 
+let currentHoldings = [];
+
 async function loadPortfolio() {
     const res = await fetch('/api/portfolio');
     const json = await res.json();
+    currentHoldings = json.holdings;
 
     document.getElementById('totalValue').textContent = '$' + json.total_value.toLocaleString(undefined, {minimumFractionDigits: 2});
     document.getElementById('totalCost').textContent = '$' + json.total_cost.toLocaleString(undefined, {minimumFractionDigits: 2});
@@ -115,6 +160,80 @@ function renderAllocChart(holdings) {
         },
         options: { plugins: { legend: { position: 'bottom', labels: { boxWidth: 12 } } } }
     });
+}
+
+function renderOptimizationCharts(currentHoldingsData, optimalAllocations) {
+    const ctxCurrent = document.getElementById('currentAllocChart').getContext('2d');
+    const ctxOptimal = document.getElementById('optimalAllocChart').getContext('2d');
+    
+    // Sort logic to match index mapping cleanly
+    const labels = optimalAllocations.map(o => o.ticker);
+    
+    const curData = [];
+    const optData = [];
+    const colors = [];
+    
+    labels.forEach(ticker => {
+        const curH = currentHoldingsData.find(h => h.ticker === ticker);
+        const optH = optimalAllocations.find(o => o.ticker === ticker);
+        curData.push(curH ? curH.allocation : 0);
+        optData.push(optH.optimal_allocation);
+        colors.push(curH ? curH.color : '#666');
+    });
+
+    if (window.curAllocChartObj) window.curAllocChartObj.destroy();
+    window.curAllocChartObj = new Chart(ctxCurrent, {
+        type: 'doughnut',
+        data: {
+            labels: labels,
+            datasets: [{ data: curData, backgroundColor: colors }]
+        },
+        options: { plugins: { legend: { position: 'bottom' } } }
+    });
+    
+    if (window.optAllocChartObj) window.optAllocChartObj.destroy();
+    window.optAllocChartObj = new Chart(ctxOptimal, {
+        type: 'doughnut',
+        data: {
+            labels: labels,
+            datasets: [{ data: optData, backgroundColor: colors }]
+        },
+        options: { plugins: { legend: { position: 'bottom' } } }
+    });
+}
+
+async function optimizePortfolio() {
+    const optimizeModal = new bootstrap.Modal(document.getElementById('optimizeModal'));
+    optimizeModal.show();
+    
+    const loadingEl = document.getElementById('optimizeLoading');
+    const resultsEl = document.getElementById('optimizeResults');
+    const errorEl = document.getElementById('optimizeError');
+    
+    loadingEl.classList.remove('d-none');
+    resultsEl.classList.add('d-none');
+    errorEl.classList.add('d-none');
+    
+    try {
+        const res = await fetch('/api/portfolio/optimize');
+        const json = await res.json();
+        
+        loadingEl.classList.add('d-none');
+        
+        if (json.error) {
+            errorEl.textContent = json.error;
+            errorEl.classList.remove('d-none');
+            return;
+        }
+        
+        resultsEl.classList.remove('d-none');
+        renderOptimizationCharts(currentHoldings, json.optimized_portfolio);
+        
+    } catch (e) {
+        loadingEl.classList.add('d-none');
+        errorEl.textContent = "An error occurred during optimization.";
+        errorEl.classList.remove('d-none');
+    }
 }
 
 document.getElementById('addForm').addEventListener('submit', async (e) => {

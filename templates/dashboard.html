@@ -9,7 +9,10 @@
     </div>
     <div>
         <button id="refreshBtn" class="btn btn-outline-primary btn-sm me-2">Refresh Now</button>
-        <button id="exportCsv" class="btn btn-outline-secondary btn-sm">Export CSV</button>
+        <button id="exportCsv" class="btn btn-outline-secondary btn-sm me-2">Export CSV</button>
+        <button id="exportAISignalsBtn" class="btn btn-success btn-sm shadow-sm">
+            <i class="fas fa-download me-1"></i> Export AI Signals (CSV)
+        </button>
     </div>
 </div>
 
@@ -186,6 +189,10 @@ document.getElementById('sortBy').addEventListener('change', applyFilters);
 
 document.getElementById('exportCsv').addEventListener('click', () => {
     window.location.href = '/api/download/csv';
+});
+
+document.getElementById('exportAISignalsBtn').addEventListener('click', () => {
+    window.location.href = '/api/export/ai-signals';
 });
 
 document.getElementById('refreshBtn').addEventListener('click', async function () {

@@ -26,6 +26,35 @@ def download_excel():
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
+@bp.route("/api/export/ai-signals")
+def export_ai_signals():
+    """Export the proprietary AI signals log as a sellable CSV dataset."""
+    import csv
+    import io
+    from flask import Response
+    
+    # Query all historical AI signals
+    logs = query_db("SELECT * FROM ai_signal_logs ORDER BY date DESC, ticker ASC")
+    
+    if not logs:
+        return "No AI signals have been collected yet. Please wait for the daily scheduled job or restart the server.", 404
+        
+    si = io.StringIO()
+    # Get headers from the first row's keys
+    keys = list(logs[0].keys())
+    writer = csv.DictWriter(si, fieldnames=keys)
+    writer.writeheader()
+    writer.writerows(logs)
+    
+    output = si.getvalue()
+    si.close()
+    
+    return Response(
+        output,
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment;filename=premium_ai_signals.csv"}
+    )
+    
 
 @bp.route("/api/reports/summary")
 def api_summary():

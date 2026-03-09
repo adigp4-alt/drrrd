@@ -32,9 +32,16 @@ def api_data():
         records_with_inds = compute_indicators(ohlcv)
         score, signal = calculate_bullish_score(records_with_inds)
         
-        # Compute ML Probability
-        ai_prob = predict_uptrend_probability(ohlcv)
-        ai_forecast_display = f"{ai_prob}%" if ai_prob is not None else "N/A"
+        # 2. AI Probabilistic Forecasting & Regime Detection
+        ai_prob, market_regime = predict_uptrend_probability(ohlcv)
+        
+        if ai_prob is not None:
+             ai_forecast_display = f"{ai_prob}% probability of +5D uptrend"
+        else:
+             ai_forecast_display = "Insufficient data"
+             
+        if not market_regime:
+             market_regime = "Unknown Regime"
         
         # Compute NLP Sentiment
         nlp_score = analyze_ticker_sentiment(ticker)

@@ -118,6 +118,9 @@
                     
                     const aiClass = item.ai_prob_num >= 65 ? 'text-success fw-bold' : (item.ai_prob_num <= 35 ? 'text-danger fw-bold' : '');
                     
+                    const regimeClass = item.market_regime === "Bullish Regime" ? 'badge bg-success ms-2' : 
+                                      (item.market_regime === "Bearish/Volatile Regime" ? 'badge bg-danger ms-2' : 'badge bg-secondary ms-2');
+                    
                     const nlpIcon = item.nlp_score >= 0.25 ? '<i class="fas fa-smile text-success"></i>' : (item.nlp_score <= -0.25 ? '<i class="fas fa-frown text-danger"></i>' : '<i class="fas fa-meh text-muted"></i>');
                     const nlpTextClass = item.nlp_score >= 0.25 ? 'text-success' : (item.nlp_score <= -0.25 ? 'text-danger' : 'text-muted');
 
@@ -139,9 +142,12 @@
                                 </div>
                             </div>
                         </td>
-                        <td class="${aiClass}">
-                            <i class="fas ${item.ai_prob_num >= 50 ? 'fa-arrow-trend-up' : 'fa-arrow-trend-down'} me-1"></i>
-                            ${item.ai_forecast}
+                        <td>
+                            <span class="${aiClass}">
+                                <i class="fas ${item.ai_prob_num >= 50 ? 'fa-arrow-trend-up' : 'fa-arrow-trend-down'} me-1"></i>
+                                ${item.ai_forecast}
+                            </span><br>
+                            <small class="${regimeClass}">${item.market_regime}</small>
                         </td>
                         <td>
                             <div class="d-flex align-items-center ${nlpTextClass}">

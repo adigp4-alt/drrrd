@@ -18,6 +18,8 @@ def analysis_page():
     return render_template("analysis.html", tickers=ALL_TICKERS, ticker_meta=TICKER_META)
 
 
+from app.prophet_forecaster import generate_prophet_forecast
+
 @bp.route("/api/analysis/<ticker>")
 def api_analysis(ticker):
     ticker = ticker.upper()
@@ -31,6 +33,9 @@ def api_analysis(ticker):
 
     data_with_indicators = compute_indicators(ohlcv)
     meta = TICKER_META[ticker]
+    
+    # Generate the 30-day AI trajectory
+    prophet_forecast = generate_prophet_forecast(ohlcv, days_ahead=30)
 
     return jsonify({
         "ticker": ticker,
@@ -38,6 +43,7 @@ def api_analysis(ticker):
         "tier": meta["tier"],
         "period": period,
         "data": data_with_indicators,
+        "prophet_forecast": prophet_forecast
     })
 
 

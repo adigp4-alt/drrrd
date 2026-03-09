@@ -144,8 +144,11 @@ def optimize_portfolio_route():
     # Fill missing values with 0
     returns_df.fillna(0, inplace=True)
     
+    # Get user's active risk profile
+    risk_profile = request.args.get("risk_profile", "Moderate")
+    
     # Run optimizer
-    optimal_weights = optimize_portfolio(list(returns_dict.keys()), returns_df)
+    optimal_weights = optimize_portfolio(list(returns_dict.keys()), returns_df, risk_profile=risk_profile)
     
     # Convert weights to percentages
     results = [{"ticker": k, "optimal_allocation": round(v * 100, 2)} for k, v in optimal_weights.items()]

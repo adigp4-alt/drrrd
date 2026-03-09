@@ -110,17 +110,31 @@ def fetch_analysis_data(ticker, period="6mo"):
         df = yf.download(ticker, period=period, progress=False)
         if df.empty:
             return None
+            
         records = []
         for date, row in df.iterrows():
-            records.append({
-                "date": date.strftime("%Y-%m-%d"),
-                "open": round(float(row["Open"]), 2),
-                "high": round(float(row["High"]), 2),
-                "low": round(float(row["Low"]), 2),
-                "close": round(float(row["Close"]), 2),
-                "volume": int(row["Volume"]) if pd.notna(row["Volume"]) else 0,
-            })
-        return records
+            try:
+                # When accessing a MultiIndex DataFrame by row, it returns a Series where the index is 
+                # a tuple like ('Close', 'LMT'). We can extract the scalar using .iloc or directly by the top level string if it was automatically converted to 1D.
+                open_val = row["Open"].iloc[0] if hasattr(row["Open"], 'iloc') and hasattr(row["Open"], '__len__') else row["Open"]
+                high_val = row["High"].iloc[0] if hasattr(row["High"], 'iloc') and hasattr(row["High"], '__len__') else row["High"]
+                low_val = row["Low"].iloc[0] if hasattr(row["Low"], 'iloc') and hasattr(row["Low"], '__len__') else row["Low"]
+                close_val = row["Close"].iloc[0] if hasattr(row["Close"], 'iloc') and hasattr(row["Close"], '__len__') else row["Close"]
+                vol_val = row["Volume"].iloc[0] if hasattr(row["Volume"], 'iloc') and hasattr(row["Volume"], '__len__') else row["Volume"]
+                
+                records.append({
+                    "date": date.strftime("%Y-%m-%d"),
+                    "open": round(float(open_val), 2),
+                    "high": round(float(high_val), 2),
+                    "low": round(float(low_val), 2),
+                    "close": round(float(close_val), 2),
+                    "volume": int(vol_val) if pd.notna(vol_val) else 0,
+                })
+            except Exception as inner_e:
+                logger.warning(f"Skipping row on {date}: {inner_e}")
+                continue
+                
+        return records if records else None
     except Exception as e:
         logger.error(f"  Analysis data error for {ticker}: {e}")
         return None

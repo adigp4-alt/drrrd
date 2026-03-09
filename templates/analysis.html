@@ -50,6 +50,16 @@
     </div>
 </div>
 
+<div class="card mb-3 border-success shadow-sm">
+    <div class="card-header bg-success text-white">
+        <i class="fas fa-robot me-1"></i> Prophet AI: 30-Day Personalized Forecast 
+        <small class="float-end pt-1" style="font-size: 0.75rem; opacity: 0.8;">Powered by Meta Open Source</small>
+    </div>
+    <div class="card-body p-2" style="position: relative; height:350px;">
+        <canvas id="prophetChart"></canvas>
+    </div>
+</div>
+
 <div class="row mb-3">
     <div class="col-md-6">
         <div class="card">
@@ -74,8 +84,9 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-let mainChart, rsiChart, macdChart;
+let mainChart, rsiChart, macdChart, prophetChartJs;
 let candleSeries, sma20Series, sma50Series, bbUpperSeries, bbLowerSeries;
 let rsiSeries, macdLineSeries, macdSignalSeries, macdHistSeries;
 let showSma20 = true, showSma50 = false, showBB = false;
@@ -141,8 +152,110 @@ async function loadAnalysis() {
     rsiChart.timeScale().fitContent();
     macdChart.timeScale().fitContent();
 
+    // Render Prophet Chart
+    if (json.prophet_forecast) {
+        renderProphetChart(json.prophet_forecast, ticker);
+    } else {
+        if (prophetChartJs) prophetChartJs.destroy();
+        const ctx = document.getElementById('prophetChart').getContext('2d');
+        ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+        ctx.font = "14px Arial";
+        ctx.fillStyle = "#666";
+        ctx.textAlign = "center";
+        ctx.fillText("Insufficient data for Prophet forecasting", ctx.canvas.width/2, ctx.canvas.height/2);
+    }
+
     updateVisibility();
     loadNews(ticker);
+}
+
+function renderProphetChart(pf, ticker) {
+    const ctx = document.getElementById('prophetChart').getContext('2d');
+    if (prophetChartJs) prophetChartJs.destroy();
+    
+    // Combine dates for the x-axis (Historical + Forecast)
+    const allDates = pf.dates.concat(pf.forecast_dates);
+    
+    // Pad arrays so they align on the X-axis
+    const paddedHistorical = [...pf.historical_prices, ...Array(pf.forecast_dates.length).fill(null)];
+    
+    const paddedYhat = [...Array(pf.dates.length).fill(null), ...pf.yhat];
+    const paddedUpper = [...Array(pf.dates.length).fill(null), ...pf.yhat_upper];
+    const paddedLower = [...Array(pf.dates.length).fill(null), ...pf.yhat_lower];
+
+    prophetChartJs = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: allDates,
+            datasets: [
+                {
+                    label: 'Historical Close',
+                    data: paddedHistorical,
+                    borderColor: 'rgba(52, 152, 219, 1)',
+                    borderWidth: 2,
+                    pointRadius: 0,
+                    fill: false,
+                    tension: 0.1
+                },
+                {
+                    label: 'Prophet Forecast (yhat)',
+                    data: paddedYhat,
+                    borderColor: 'rgba(39, 174, 96, 1)',
+                    borderWidth: 2,
+                    borderDash: [5, 5],
+                    pointRadius: 0,
+                    fill: false,
+                    tension: 0.1
+                },
+                {
+                    label: 'Upper Confidence (80%)',
+                    data: paddedUpper,
+                    borderColor: 'rgba(39, 174, 96, 0.2)',
+                    backgroundColor: 'rgba(39, 174, 96, 0.1)',
+                    borderWidth: 1,
+                    pointRadius: 0,
+                    fill: '+1', // Fill down to the next dataset (lower confidence)
+                    tension: 0.1
+                },
+                {
+                    label: 'Lower Confidence (80%)',
+                    data: paddedLower,
+                    borderColor: 'rgba(39, 174, 96, 0.2)',
+                    borderWidth: 1,
+                    pointRadius: 0,
+                    fill: false,
+                    tension: 0.1
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            let label = context.dataset.label || '';
+                            if (label) { label += ': '; }
+                            if (context.parsed.y !== null) {
+                                label += new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(context.parsed.y);
+                            }
+                            return label;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: { ticks: { maxTicksLimit: 10 } },
+                y: {
+                    ticks: {
+                        callback: function(value) { return '$' + value; }
+                    }
+                }
+            }
+        }
+    });
 }
 
 function updateVisibility() {

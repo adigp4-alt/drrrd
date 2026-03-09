@@ -1,0 +1,265 @@
+{% extends "base.html" %}
+{% block title %}Portfolio — Iran Investment Tracker{% endblock %}
+
+{% block content %}
+<h2 class="mb-3">Portfolio Tracker</h2>
+
+<div class="row mb-4" id="summaryCards">
+    <div class="col-md-3"><div class="card stat-card"><div class="label">Total Value</div><div class="value" id="totalValue">—</div></div></div>
+    <div class="col-md-3"><div class="card stat-card"><div class="label">Total Cost</div><div class="value" id="totalCost">—</div></div></div>
+    <div class="col-md-3"><div class="card stat-card"><div class="label">Total P&L</div><div class="value" id="totalPnl">—</div></div></div>
+    <div class="col-md-3"><div class="card stat-card"><div class="label">Positions</div><div class="value" id="posCount">—</div></div></div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">Holdings</div>
+            <div class="card-body p-0">
+                <table class="table table-hover mb-0" id="holdingsTable">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>Ticker</th><th>Name</th><th>Tier</th><th>Shares</th>
+                            <th>Buy Price</th><th>Current</th><th>Cost Basis</th>
+                            <th>Market Value</th><th>P&L</th><th>P&L %</th><th>Alloc %</th><th></th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card mb-3">
+            <div class="card-header">Add Position</div>
+            <div class="card-body">
+                <form id="addForm">
+                    <div class="mb-2">
+                        <input type="text" class="form-control form-control-sm" id="addTicker" placeholder="Ticker (e.g. AAPL)" required>
+                    </div>
+                    <div class="mb-2">
+                        <input type="number" class="form-control form-control-sm" id="addShares" placeholder="Shares" step="any" required>
+                    </div>
+                    <div class="mb-2">
+                        <input type="number" class="form-control form-control-sm" id="addBuyPrice" placeholder="Buy Price" step="any" required>
+                    </div>
+                    <div class="mb-2">
+                        <input type="date" class="form-control form-control-sm" id="addBuyDate">
+                    </div>
+                    <div class="mb-2">
+                        <input type="text" class="form-control form-control-sm" id="addNotes" placeholder="Notes (optional)">
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-sm w-100">Add Position</button>
+                </form>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>Allocation</span>
+                <button class="btn btn-sm btn-outline-success" onclick="optimizePortfolio()">
+                    <i class="fas fa-magic"></i> Optimize
+                </button>
+            </div>
+            <div class="card-body">
+                <canvas id="allocChart" height="250"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Optimization Modal -->
+<div class="modal fade" id="optimizeModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-chart-pie"></i> Portfolio Optimization</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small">
+                    Using Modern Portfolio Theory (MPT), this tool analyzes the historical volatility and correlation of your current holdings to suggest an allocation that maximizes your expected return for a given level of risk (highest Sharpe Ratio).
+                </p>
+                
+                <div id="optimizeLoading" class="text-center py-4 d-none">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <div class="mt-2">Running historical analysis & generating efficient frontier...</div>
+                </div>
+                
+                <div id="optimizeError" class="alert alert-danger d-none mt-2"></div>
+                
+                <div id="optimizeResults" class="d-none">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6 class="text-center mb-3">Current Allocation</h6>
+                            <canvas id="currentAllocChart" height="200"></canvas>
+                        </div>
+                        <div class="col-md-6">
+                            <h6 class="text-center mb-3 text-success">Optimized Allocation</h6>
+                            <canvas id="optimalAllocChart" height="200"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let allocChart = null;
+
+let currentHoldings = [];
+
+async function loadPortfolio() {
+    const res = await fetch('/api/portfolio');
+    const json = await res.json();
+    currentHoldings = json.holdings;
+
+    document.getElementById('totalValue').textContent = '$' + json.total_value.toLocaleString(undefined, {minimumFractionDigits: 2});
+    document.getElementById('totalCost').textContent = '$' + json.total_cost.toLocaleString(undefined, {minimumFractionDigits: 2});
+    const pnlEl = document.getElementById('totalPnl');
+    pnlEl.textContent = (json.total_pnl >= 0 ? '+$' : '-$') + Math.abs(json.total_pnl).toLocaleString(undefined, {minimumFractionDigits: 2});
+    pnlEl.className = 'value ' + (json.total_pnl >= 0 ? 'text-profit' : 'text-loss');
+    document.getElementById('posCount').textContent = json.holdings.length;
+
+    const tbody = document.querySelector('#holdingsTable tbody');
+    tbody.innerHTML = json.holdings.map(h => {
+        const cls = h.pnl >= 0 ? 'text-profit' : 'text-loss';
+        return `<tr>
+            <td><strong style="color:${h.color}">${h.ticker}</strong></td>
+            <td>${h.name}</td>
+            <td>${h.tier}</td>
+            <td>${h.shares}</td>
+            <td>$${h.buy_price.toFixed(2)}</td>
+            <td>$${h.current_price.toFixed(2)}</td>
+            <td>$${h.cost_basis.toFixed(2)}</td>
+            <td>$${h.market_value.toFixed(2)}</td>
+            <td class="${cls}">${h.pnl >= 0 ? '+' : ''}$${h.pnl.toFixed(2)}</td>
+            <td class="${cls}">${h.pnl_pct >= 0 ? '+' : ''}${h.pnl_pct.toFixed(2)}%</td>
+            <td>${h.allocation.toFixed(1)}%</td>
+            <td><button class="btn btn-outline-danger btn-sm" onclick="deleteHolding(${h.id})">X</button></td>
+        </tr>`;
+    }).join('');
+
+    renderAllocChart(json.holdings);
+}
+
+function renderAllocChart(holdings) {
+    const ctx = document.getElementById('allocChart').getContext('2d');
+    if (allocChart) allocChart.destroy();
+    if (!holdings.length) return;
+    allocChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: holdings.map(h => h.ticker),
+            datasets: [{
+                data: holdings.map(h => h.allocation),
+                backgroundColor: holdings.map(h => h.color),
+            }]
+        },
+        options: { plugins: { legend: { position: 'bottom', labels: { boxWidth: 12 } } } }
+    });
+}
+
+function renderOptimizationCharts(currentHoldingsData, optimalAllocations) {
+    const ctxCurrent = document.getElementById('currentAllocChart').getContext('2d');
+    const ctxOptimal = document.getElementById('optimalAllocChart').getContext('2d');
+    
+    // Sort logic to match index mapping cleanly
+    const labels = optimalAllocations.map(o => o.ticker);
+    
+    const curData = [];
+    const optData = [];
+    const colors = [];
+    
+    labels.forEach(ticker => {
+        const curH = currentHoldingsData.find(h => h.ticker === ticker);
+        const optH = optimalAllocations.find(o => o.ticker === ticker);
+        curData.push(curH ? curH.allocation : 0);
+        optData.push(optH.optimal_allocation);
+        colors.push(curH ? curH.color : '#666');
+    });
+
+    if (window.curAllocChartObj) window.curAllocChartObj.destroy();
+    window.curAllocChartObj = new Chart(ctxCurrent, {
+        type: 'doughnut',
+        data: {
+            labels: labels,
+            datasets: [{ data: curData, backgroundColor: colors }]
+        },
+        options: { plugins: { legend: { position: 'bottom' } } }
+    });
+    
+    if (window.optAllocChartObj) window.optAllocChartObj.destroy();
+    window.optAllocChartObj = new Chart(ctxOptimal, {
+        type: 'doughnut',
+        data: {
+            labels: labels,
+            datasets: [{ data: optData, backgroundColor: colors }]
+        },
+        options: { plugins: { legend: { position: 'bottom' } } }
+    });
+}
+
+async function optimizePortfolio() {
+    const optimizeModal = new bootstrap.Modal(document.getElementById('optimizeModal'));
+    optimizeModal.show();
+    
+    const loadingEl = document.getElementById('optimizeLoading');
+    const resultsEl = document.getElementById('optimizeResults');
+    const errorEl = document.getElementById('optimizeError');
+    
+    loadingEl.classList.remove('d-none');
+    resultsEl.classList.add('d-none');
+    errorEl.classList.add('d-none');
+    
+    try {
+        const res = await fetch('/api/portfolio/optimize');
+        const json = await res.json();
+        
+        loadingEl.classList.add('d-none');
+        
+        if (json.error) {
+            errorEl.textContent = json.error;
+            errorEl.classList.remove('d-none');
+            return;
+        }
+        
+        resultsEl.classList.remove('d-none');
+        renderOptimizationCharts(currentHoldings, json.optimized_portfolio);
+        
+    } catch (e) {
+        loadingEl.classList.add('d-none');
+        errorEl.textContent = "An error occurred during optimization.";
+        errorEl.classList.remove('d-none');
+    }
+}
+
+document.getElementById('addForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const body = {
+        ticker: document.getElementById('addTicker').value,
+        shares: parseFloat(document.getElementById('addShares').value),
+        buy_price: parseFloat(document.getElementById('addBuyPrice').value),
+        buy_date: document.getElementById('addBuyDate').value,
+        notes: document.getElementById('addNotes').value,
+    };
+    await fetch('/api/portfolio', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body)
+    });
+    e.target.reset();
+    loadPortfolio();
+});
+
+async function deleteHolding(id) {
+    if (!confirm('Remove this position?')) return;
+    await fetch('/api/portfolio/' + id, { method: 'DELETE' });
+    loadPortfolio();
+}
+
+loadPortfolio();
+</script>
+{% endblock %}

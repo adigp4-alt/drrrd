@@ -1,0 +1,286 @@
+{% extends "base.html" %}
+{% block title %}Algorithmic Backtester - Iran Investment Tracker{% endblock %}
+
+{% block style %}
+.metric-card {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    border-radius: 12px;
+}
+.metric-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 10px 20px rgba(0,0,0,0.05);
+}
+.metric-value {
+    font-size: 2rem;
+    font-weight: 700;
+}
+.text-profit { color: #27ae60; }
+.text-loss { color: #e74c3c; }
+{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12 col-md-8">
+        <h2><i class="fas fa-flask"></i> Algorithmic Strategy Backtester</h2>
+        <p class="text-muted">
+            Simulate the performance of the AI/Algorithmic Strategy against a simple "Buy and Hold" strategy over the past year. 
+        </p>
+    </div>
+    <div class="col-12 col-md-4 text-end">
+        <form id="backtestForm" class="d-flex gx-2 align-items-center justify-content-end">
+            <label for="tickerSelect" class="me-2 fw-bold">Asset:</label>
+            <select id="tickerSelect" class="form-select w-auto me-2">
+                <option value="" disabled selected>Select a Ticker</option>
+                {% for ticker in tickers %}
+                    <option value="{{ ticker }}">{{ ticker }}</option>
+                {% endfor %}
+            </select>
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-play"></i> Run
+            </button>
+        </form>
+    </div>
+</div>
+
+<div id="loadingState" class="text-center py-5 d-none">
+    <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
+        <span class="visually-hidden">Loading...</span>
+    </div>
+    <h5 class="mt-3 text-muted">Running historical simulation...</h5>
+    <p class="small text-muted">Calculating indicators and processing AI forecasts over 1 year of data.</p>
+</div>
+
+<div id="errorState" class="alert alert-danger d-none">
+    <i class="fas fa-exclamation-triangle"></i> <span id="errorMsg"></span>
+</div>
+
+<div id="resultsDashboard" class="d-none">
+    <!-- Top Metrics -->
+    <div class="row g-3 mb-4">
+        <div class="col-12 col-sm-6 col-lg-3">
+            <div class="card metric-card shadow-sm h-100 border-0">
+                <div class="card-body text-center d-flex flex-column justify-content-center">
+                    <div class="text-muted small text-uppercase fw-bold mb-1">Strategy Return</div>
+                    <div id="metricStrategy" class="metric-value">--</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-sm-6 col-lg-3">
+            <div class="card metric-card shadow-sm h-100 border-0">
+                <div class="card-body text-center d-flex flex-column justify-content-center">
+                    <div class="text-muted small text-uppercase fw-bold mb-1">Buy & Hold Return</div>
+                    <div id="metricBH" class="metric-value">--</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-sm-6 col-lg-3">
+            <div class="card metric-card shadow-sm h-100 border-0">
+                <div class="card-body text-center d-flex flex-column justify-content-center">
+                    <div class="text-muted small text-uppercase fw-bold mb-1">Win Rate</div>
+                    <div id="metricWinRate" class="metric-value">--</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-sm-6 col-lg-3">
+            <div class="card metric-card shadow-sm h-100 border-0">
+                <div class="card-body text-center d-flex flex-column justify-content-center">
+                    <div class="text-muted small text-uppercase fw-bold mb-1">Max Drawdown</div>
+                    <div id="metricDrawdown" class="metric-value">--</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Chart and Trade History -->
+    <div class="row g-4">
+        <!-- Equity Curve Chart -->
+        <div class="col-12 col-lg-8">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-header bg-white border-0 pt-3 pb-0">
+                    <h5 class="card-title fw-bold">Equity Curve Comparison ($10,000 Initial)</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="equityChart" height="300"></canvas>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Recent Trades Table -->
+        <div class="col-12 col-lg-4">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-header border-0 pt-3 pb-0">
+                    <h5 class="fw-bold mb-0">Recent Trades</h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover mb-0 mt-2">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Action</th>
+                                    <th>Price</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tradesBody">
+                                <!-- Trades injected via JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    let equityChartObj = null;
+
+    document.getElementById('backtestForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const ticker = document.getElementById('tickerSelect').value;
+        if(!ticker) return alert("Please select a ticker first");
+        
+        const loading = document.getElementById('loadingState');
+        const errorEl = document.getElementById('errorState');
+        const results = document.getElementById('resultsDashboard');
+        
+        loading.classList.remove('d-none');
+        errorEl.classList.add('d-none');
+        results.classList.add('d-none');
+        
+        try {
+            const res = await fetch(`/backtest/api/run?ticker=${encodeURIComponent(ticker)}`);
+            const data = await res.json();
+            
+            loading.classList.add('d-none');
+            
+            if (data.error) {
+                document.getElementById('errorMsg').innerText = data.error;
+                errorEl.classList.remove('d-none');
+                return;
+            }
+            
+            renderResults(data);
+            results.classList.remove('d-none');
+            
+        } catch (err) {
+            loading.classList.add('d-none');
+            document.getElementById('errorMsg').innerText = "A network error occurred while running the backtest.";
+            errorEl.classList.remove('d-none');
+        }
+    });
+    
+    function formatPct(val) {
+        if (typeof val !== 'number') return '--';
+        const formatted = val.toFixed(2) + '%';
+        if (val > 0) return `<span class="text-profit">+${formatted}</span>`;
+        if (val < 0) return `<span class="text-loss">${formatted}</span>`;
+        return `<span>${formatted}</span>`;
+    }
+
+    function renderResults(data) {
+        // Render Top Metrics
+        document.getElementById('metricStrategy').innerHTML = formatPct(data.strategy_return_pct);
+        document.getElementById('metricBH').innerHTML = formatPct(data.buy_hold_return_pct);
+        document.getElementById('metricWinRate').innerHTML = `<span class="text-primary">${data.win_rate_pct.toFixed(1)}%</span>`;
+        document.getElementById('metricDrawdown').innerHTML = `<span class="text-danger">${data.max_drawdown_pct.toFixed(2)}%</span>`;
+        
+        // Render Trades Table
+        const tradesHtml = data.trade_history.length === 0 
+            ? '<tr><td colspan="3" class="text-center text-muted py-3">No trades executed</td></tr>'
+            : data.trade_history.map(t => {
+                const actionBadge = t.action === 'BUY' 
+                    ? '<span class="badge bg-success">BUY</span>'
+                    : '<span class="badge bg-danger">SELL</span>';
+                return `<tr>
+                    <td class="small">${t.date}</td>
+                    <td>${actionBadge}</td>
+                    <td>$${t.price.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+                </tr>`;
+            }).join('');
+            
+        document.getElementById('tradesBody').innerHTML = tradesHtml;
+        
+        // Render Chart
+        const labels = data.equity_curve.map(e => e.date);
+        const strategyData = data.equity_curve.map(e => e.strategy);
+        const bhData = data.equity_curve.map(e => e.buy_hold);
+        
+        const ctx = document.getElementById('equityChart').getContext('2d');
+        if (equityChartObj) {
+            equityChartObj.destroy();
+        }
+        
+        equityChartObj = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Algorithmic Strategy',
+                        data: strategyData,
+                        borderColor: '#2ecc71',
+                        backgroundColor: 'rgba(46, 204, 113, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.1,
+                        pointRadius: 0
+                    },
+                    {
+                        label: 'Buy & Hold',
+                        data: bhData,
+                        borderColor: '#95a5a6',
+                        borderWidth: 2,
+                        borderDash: [5, 5],
+                        fill: false,
+                        tension: 0.1,
+                        pointRadius: 0
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false,
+                },
+                scales: {
+                    y: {
+                        ticks: {
+                            callback: function(value) {
+                                return '$' + value.toLocaleString();
+                            }
+                        }
+                    },
+                    x: {
+                        ticks: {
+                            maxTicksLimit: 12
+                        }
+                    }
+                },
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                if (context.parsed.y !== null) {
+                                    label += new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(context.parsed.y);
+                                }
+                                return label;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+</script>
+{% endblock %}

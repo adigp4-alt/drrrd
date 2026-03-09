@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — Iran Investment Tracker{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h2>Market Dashboard</h2>
+        <p id="lastUpdated" class="text-muted mb-0"></p>
+    </div>
+    <div>
+        <button id="refreshBtn" class="btn btn-outline-primary btn-sm me-2">Refresh Now</button>
+        <button id="exportCsv" class="btn btn-outline-secondary btn-sm">Export CSV</button>
+    </div>
+</div>
+
+<div id="alerts" class="mb-3"></div>
+
+<div class="row mb-3">
+    <div class="col-md-4">
+        <input type="text" id="search" class="form-control" placeholder="Search tickers...">
+    </div>
+    <div class="col-md-3">
+        <select id="tierFilter" class="form-select">
+            <option value="all">All Tiers</option>
+            <option value="T1">T1 - Post-Conflict Reconstruction</option>
+            <option value="T2">T2 - Defense &amp; Energy</option>
+            <option value="T3">T3 - Israeli Equities &amp; Cybersecurity</option>
+            <option value="T4">T4 - Tanker &amp; Shipping</option>
+            <option value="T5">T5 - Broad Sector ETFs</option>
+        </select>
+    </div>
+    <div class="col-md-2">
+        <select id="sortBy" class="form-select">
+            <option value="default">Default Order</option>
+            <option value="change_desc">Change % (High)</option>
+            <option value="change_asc">Change % (Low)</option>
+            <option value="price_desc">Price (High)</option>
+            <option value="volume_desc">Volume (High)</option>
+        </select>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-body">
+        <canvas id="stockChart" height="80"></canvas>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body p-0">
+        <table class="table table-hover mb-0" id="stocksTable">
+            <thead class="table-dark">
+                <tr>
+                    <th>Ticker</th>
+                    <th>Name</th>
+                    <th>Tier</th>
+                    <th>Price</th>
+                    <th>Change</th>
+                    <th>Open</th>
+                    <th>High</th>
+                    <th>Low</th>
+                    <th>Volume</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let allStocks = [];
+let stockChart = null;
+
+async function loadData() {
+    const res = await fetch('/api/prices');
+    const json = await res.json();
+
+    if (json.last_updated) {
+        document.getElementById('lastUpdated').textContent = 'Last updated: ' + json.last_updated;
+    }
+
+    allStocks = json.ticker_order
+        .filter(sym => json.tickers[sym])
+        .map(sym => json.tickers[sym]);
+
+    renderAlerts(json.alerts || []);
+    applyFilters();
+    renderChart(allStocks.slice(0, 10));
+}
+
+function renderAlerts(alerts) {
+    const div = document.getElementById('alerts');
+    if (!alerts.length) { div.innerHTML = ''; return; }
+    div.innerHTML = alerts.map(a =>
+        `<div class="alert alert-${a.direction === 'surge' ? 'success' : 'danger'} py-2 mb-1">
+            <strong>${a.ticker}</strong> ${a.message}
+        </div>`
+    ).join('');
+}
+
+function renderChart(stocks) {
+    const ctx = document.getElementById('stockChart').getContext('2d');
+    if (stockChart) stockChart.destroy();
+    stockChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: stocks.map(s => s.ticker),
+            datasets: [{
+                label: 'Daily Change %',
+                data: stocks.map(s => s.change_pct),
+                backgroundColor: stocks.map(s => s.change_pct >= 0 ? '#27ae60' : '#e74c3c'),
+                borderRadius: 4,
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: { y: { beginAtZero: true, title: { display: true, text: 'Change %' } } }
+        }
+    });
+}
+
+function renderTable(stocks) {
+    const tbody = document.querySelector('#stocksTable tbody');
+    tbody.innerHTML = stocks.map(stock => {
+        const cls = stock.change_pct >= 0 ? 'text-profit' : 'text-loss';
+        const sign = stock.change_pct >= 0 ? '+' : '';
+        return `<tr>
+            <td><strong style="color:${stock.color}">${stock.ticker}</strong></td>
+            <td>${stock.name}</td>
+            <td><span class="badge" style="background:${stock.color}">${stock.tier}</span></td>
+            <td>$${stock.price.toFixed(2)}</td>
+            <td class="${cls}">${sign}${stock.change_pct.toFixed(2)}%</td>
+            <td>$${stock.open.toFixed(2)}</td>
+            <td>$${stock.high.toFixed(2)}</td>
+            <td>$${stock.low.toFixed(2)}</td>
+            <td>${stock.volume.toLocaleString()}</td>
+        </tr>`;
+    }).join('');
+}
+
+function applyFilters() {
+    const tier = document.getElementById('tierFilter').value;
+    const query = document.getElementById('search').value.toLowerCase();
+    const sort = document.getElementById('sortBy').value;
+
+    let filtered = allStocks.filter(s => {
+        const matchesTier = tier === 'all' || s.tier === tier;
+        const matchesQuery = s.ticker.toLowerCase().includes(query) || s.name.toLowerCase().includes(query);
+        return matchesTier && matchesQuery;
+    });
+
+    if (sort === 'change_desc') filtered.sort((a, b) => b.change_pct - a.change_pct);
+    else if (sort === 'change_asc') filtered.sort((a, b) => a.change_pct - b.change_pct);
+    else if (sort === 'price_desc') filtered.sort((a, b) => b.price - a.price);
+    else if (sort === 'volume_desc') filtered.sort((a, b) => b.volume - a.volume);
+
+    renderTable(filtered);
+}
+
+document.getElementById('tierFilter').addEventListener('change', applyFilters);
+document.getElementById('search').addEventListener('input', applyFilters);
+document.getElementById('sortBy').addEventListener('change', applyFilters);
+
+document.getElementById('exportCsv').addEventListener('click', () => {
+    window.location.href = '/api/download/csv';
+});
+
+document.getElementById('refreshBtn').addEventListener('click', async function () {
+    this.disabled = true;
+    this.textContent = 'Refreshing...';
+    await fetch('/api/refresh', { method: 'POST' });
+    await loadData();
+    this.disabled = false;
+    this.textContent = 'Refresh Now';
+});
+
+loadData();
+setInterval(loadData, 60000);
+</script>
+{% endblock %}

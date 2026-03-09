@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block title %}Alerts — Iran Investment Tracker{% endblock %}
+
+{% block content %}
+<h2 class="mb-3">Smart Alerts</h2>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card mb-3">
+            <div class="card-header">Active Rules</div>
+            <div class="card-body p-0">
+                <table class="table table-hover mb-0" id="rulesTable">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>Ticker</th><th>Condition</th><th>Threshold</th>
+                            <th>Status</th><th>Last Triggered</th><th></th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">Alert History</div>
+            <div class="card-body p-0">
+                <table class="table table-sm mb-0" id="historyTable">
+                    <thead><tr><th>Time</th><th>Ticker</th><th>Message</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card mb-3">
+            <div class="card-header">Create Alert Rule</div>
+            <div class="card-body">
+                <form id="alertForm">
+                    <div class="mb-2">
+                        <input type="text" class="form-control form-control-sm" id="alertTicker" placeholder="Ticker" required>
+                    </div>
+                    <div class="mb-2">
+                        <select class="form-select form-select-sm" id="alertCondition" required>
+                            <option value="above">Price Above</option>
+                            <option value="below">Price Below</option>
+                            <option value="change_pct_above">Change % Above</option>
+                            <option value="volume_spike">Volume Above</option>
+                        </select>
+                    </div>
+                    <div class="mb-2">
+                        <input type="number" class="form-control form-control-sm" id="alertThreshold" placeholder="Threshold" step="any" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-sm w-100">Create Rule</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">Telegram Setup</div>
+            <div class="card-body">
+                <p class="small text-muted">Set <code>TELEGRAM_BOT_TOKEN</code> and <code>TELEGRAM_CHAT_ID</code> as environment variables to enable Telegram alerts.</p>
+                <button id="testTelegram" class="btn btn-outline-secondary btn-sm w-100">Test Telegram</button>
+                <div id="telegramStatus" class="small mt-2"></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function loadAlerts() {
+    const res = await fetch('/api/alerts');
+    const json = await res.json();
+
+    const rulesTbody = document.querySelector('#rulesTable tbody');
+    rulesTbody.innerHTML = json.rules.map(r => {
+        const condLabels = { above: 'Price Above', below: 'Price Below', change_pct_above: 'Change % >', volume_spike: 'Volume >' };
+        return `<tr>
+            <td><strong>${r.ticker}</strong></td>
+            <td>${condLabels[r.condition] || r.condition}</td>
+            <td>${r.threshold}</td>
+            <td>
+                <button class="btn btn-sm ${r.enabled ? 'btn-success' : 'btn-secondary'}" onclick="toggleRule(${r.id})">
+                    ${r.enabled ? 'Active' : 'Paused'}
+                </button>
+            </td>
+            <td class="small">${r.last_triggered || 'Never'}</td>
+            <td><button class="btn btn-outline-danger btn-sm" onclick="deleteRule(${r.id})">X</button></td>
+        </tr>`;
+    }).join('');
+
+    const histTbody = document.querySelector('#historyTable tbody');
+    histTbody.innerHTML = json.history.map(h =>
+        `<tr><td class="small">${h.triggered_at}</td><td>${h.ticker}</td><td>${h.message}</td></tr>`
+    ).join('');
+}
+
+document.getElementById('alertForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    await fetch('/api/alerts', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            ticker: document.getElementById('alertTicker').value,
+            condition: document.getElementById('alertCondition').value,
+            threshold: parseFloat(document.getElementById('alertThreshold').value),
+        })
+    });
+    e.target.reset();
+    loadAlerts();
+});
+
+async function deleteRule(id) {
+    await fetch('/api/alerts/' + id, { method: 'DELETE' });
+    loadAlerts();
+}
+
+async function toggleRule(id) {
+    await fetch('/api/alerts/' + id + '/toggle', { method: 'POST' });
+    loadAlerts();
+}
+
+document.getElementById('testTelegram').addEventListener('click', async () => {
+    const status = document.getElementById('telegramStatus');
+    status.textContent = 'Sending...';
+    const res = await fetch('/api/alerts/test-telegram', { method: 'POST' });
+    const json = await res.json();
+    status.textContent = json.status === 'sent' ? 'Test sent!' : 'Failed: ' + (json.error || 'Unknown error');
+    status.className = 'small mt-2 ' + (json.status === 'sent' ? 'text-success' : 'text-danger');
+});
+
+loadAlerts();
+</script>
+{% endblock %}

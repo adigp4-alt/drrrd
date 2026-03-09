@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+{% block title %}Algorithmic Screener - Iran Investment Tracker{% endblock %}
+
+{% block style %}
+.score-high { color: #27ae60; font-weight: 700; }
+.score-medium { color: #f1c40f; font-weight: 700; }
+.score-low { color: #e74c3c; font-weight: 700; }
+
+.badge-signal-strong-buy { background-color: #2ecc71; color: #fff; font-size: 0.9rem; padding: 0.4rem 0.8rem; }
+.badge-signal-buy { background-color: #27ae60; color: #fff; font-size: 0.9rem; padding: 0.4rem 0.8rem; }
+.badge-signal-hold { background-color: #95a5a6; color: #fff; font-size: 0.9rem; padding: 0.4rem 0.8rem; }
+.badge-signal-sell { background-color: #e67e22; color: #fff; font-size: 0.9rem; padding: 0.4rem 0.8rem; }
+.badge-signal-strong-sell { background-color: #e74c3c; color: #fff; font-size: 0.9rem; padding: 0.4rem 0.8rem; }
+
+.table-hover tbody tr:hover {
+    background-color: rgba(0,0,0,0.02);
+    cursor: pointer;
+}
+{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center">
+            <h2><i class="fas fa-radar"></i> Algorithmic Trade Screener</h2>
+            <button class="btn btn-outline-primary" id="btnRefresh" onclick="loadScreenerData()">
+                <i class="fas fa-sync-alt"></i> Refresh Data
+            </button>
+        </div>
+        <p class="text-muted">
+            Assets are automatically scored from 0-100 based on technical confluence (RSI, MACD crossover, Moving Averages, and Error Bands).
+            A higher score indicates a stronger bullish trend/setup.
+        </p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card shadow-sm">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0" id="screenerTable">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Ticker</th>
+                                <th>Current Price</th>
+                                <th>Change (%)</th>
+                                <th>Bullish Score</th>
+                                <th>AI Forecast</th>
+                                <th>NLP Sentiment</th>
+                                <th>Kelly Allocation</th>
+                                <th>Trade Signal</th>
+                                <th>Confidence</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="screenerBody">
+                            <tr>
+                                <td colspan="10" class="text-center py-5 text-muted">
+                                    <div class="spinner-border text-primary" role="status">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </div>
+                                    <div class="mt-2">Analyzing technicals and running ML/NLP predictions...</div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Scripts for fetching data -->
+<script>
+    function getSignalBadgeClass(signal) {
+        if (signal === "SUPER BUY") return "badge-signal-strong-buy bg-gradient shadow-sm";
+        if (signal === "SUPER SELL") return "badge-signal-strong-sell bg-gradient shadow-sm";
+        if (signal === "Strong Buy") return "badge-signal-strong-buy";
+        if (signal === "Buy") return "badge-signal-buy";
+        if (signal === "Sell") return "badge-signal-sell";
+        if (signal === "Strong Sell") return "badge-signal-strong-sell";
+        return "badge-signal-hold";
+    }
+
+    function getScoreClass(score) {
+        if (score >= 70) return "score-high";
+        if (score <= 30) return "score-low";
+        return "score-medium";
+    }
+
+    function loadScreenerData() {
+        const tbody = document.getElementById('screenerBody');
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="10" class="text-center py-5 text-muted">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <div class="mt-2">Analyzing technicals and running ML/NLP predictions...</div>
+                </td>
+            </tr>
+        `;
+
+        fetch('/screener/api/data')
+            .then(res => res.json())
+            .then(data => {
+                tbody.innerHTML = '';
+                
+                if(data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="10" class="text-center py-4">No data available. Please wait for the initial fetch to complete.</td></tr>';
+                    return;
+                }
+
+                data.forEach(item => {
+                    const changeClass = (typeof item.change_pct === 'number' && item.change_pct >= 0) ? 'text-success' : 'text-danger';
+                    const changeVal = (typeof item.change_pct === 'number') ? item.change_pct.toFixed(2) + '%' : 'N/A';
+                    
+                    const aiClass = item.ai_prob_num >= 65 ? 'text-success fw-bold' : (item.ai_prob_num <= 35 ? 'text-danger fw-bold' : '');
+                    
+                    const regimeClass = item.market_regime === "Bullish Regime" ? 'badge bg-success ms-2' : 
+                                      (item.market_regime === "Bearish/Volatile Regime" ? 'badge bg-danger ms-2' : 'badge bg-secondary ms-2');
+                    
+                    const nlpIcon = item.nlp_score >= 0.25 ? '<i class="fas fa-smile text-success"></i>' : (item.nlp_score <= -0.25 ? '<i class="fas fa-frown text-danger"></i>' : '<i class="fas fa-meh text-muted"></i>');
+                    const nlpTextClass = item.nlp_score >= 0.25 ? 'text-success' : (item.nlp_score <= -0.25 ? 'text-danger' : 'text-muted');
+
+                    const kellyClass = item.kelly_fraction > 0 ? 'text-success fw-bold' : 'text-muted';
+
+                    const row = document.createElement('tr');
+                    
+                    row.innerHTML = `
+                        <td class="fw-bold fs-5">${item.ticker}</td>
+                        <td>${item.price.toLocaleString()}</td>
+                        <td class="fw-medium ${changeClass}">${changeVal}</td>
+                        <td>
+                            <div class="d-flex align-items-center">
+                                <span class="fs-5 me-2 ${getScoreClass(item.score)}">${item.score}</span>
+                                <div class="progress" style="height: 6px; width: 60px;">
+                                    <div class="progress-bar ${getScoreClass(item.score).replace('score-high','bg-success').replace('score-low','bg-danger').replace('score-medium','bg-warning')}" 
+                                         role="progressbar" style="width: ${item.score}%" 
+                                         aria-valuenow="${item.score}" aria-valuemin="0" aria-valuemax="100"></div>
+                                </div>
+                            </div>
+                        </td>
+                        <td>
+                            <span class="${aiClass}">
+                                <i class="fas ${item.ai_prob_num >= 50 ? 'fa-arrow-trend-up' : 'fa-arrow-trend-down'} me-1"></i>
+                                ${item.ai_forecast}
+                            </span><br>
+                            <small class="${regimeClass}">${item.market_regime}</small>
+                        </td>
+                        <td>
+                            <div class="d-flex align-items-center ${nlpTextClass}">
+                                <span class="me-2 fs-5">${nlpIcon}</span>
+                                <div class="lh-sm">
+                                    <strong>${item.nlp_label}</strong><br>
+                                    <small class="text-muted">Score: ${item.nlp_score}</small>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="${kellyClass}">
+                            ${item.kelly_display !== 'N/A' ? '<i class="fas fa-coins me-1"></i>' : ''}
+                            ${item.kelly_display}
+                        </td>
+                        <td>
+                            <span class="badge rounded-pill ${getSignalBadgeClass(item.signal)}">${item.signal === 'SUPER BUY' ? '<i class="fas fa-bolt text-warning"></i> SUPER BUY' : (item.signal === 'SUPER SELL' ? '<i class="fas fa-bolt text-warning"></i> SUPER SELL' : item.signal)}</span>
+                        </td>
+                        <td>${item.confidence}</td>
+                        <td>
+                            <a href="/analysis?ticker=${item.ticker}" class="btn btn-sm btn-outline-secondary">View Chart</a>
+                        </td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            })
+            .catch(err => {
+                console.error("Error fetching screener data:", err);
+                tbody.innerHTML = '<tr><td colspan="10" class="text-danger text-center py-4">Error loading screener data. Ensure the server is running.</td></tr>';
+            });
+    }
+
+    // Load straight away
+    document.addEventListener('DOMContentLoaded', loadScreenerData);
+</script>
+{% endblock %}

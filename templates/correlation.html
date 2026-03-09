@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}Correlation — Iran Investment Tracker{% endblock %}
+
+{% block style %}
+#heatmap { overflow-x: auto; }
+.corr-cell {
+    width: 30px; height: 30px; display: inline-block;
+    font-size: 0.6rem; text-align: center; line-height: 30px;
+    cursor: pointer; border: 1px solid #fff;
+}
+.corr-label { font-size: 0.7rem; font-weight: bold; writing-mode: vertical-rl; text-align: center; }
+{% endblock %}
+
+{% block content %}
+<h2 class="mb-3">Correlation Analysis</h2>
+
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card stat-card">
+            <div class="label">Diversification Score</div>
+            <div class="value" id="divScore">—</div>
+            <div class="small text-muted">0 = identical, 100 = fully diversified</div>
+        </div>
+    </div>
+    <div class="col-md-9">
+        <div class="card">
+            <div class="card-header">Highly Correlated Pairs (>0.8)</div>
+            <div class="card-body p-0">
+                <table class="table table-sm mb-0" id="pairsTable">
+                    <thead><tr><th>Ticker A</th><th>Ticker B</th><th>Correlation</th><th>Warning</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">Correlation Heatmap</div>
+    <div class="card-body">
+        <div id="heatmap"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function corrColor(val) {
+    // Red for positive, blue for negative, white for zero
+    if (val >= 0) {
+        const intensity = Math.round(val * 200);
+        return `rgb(${200 + Math.round(val * 55)}, ${200 - intensity}, ${200 - intensity})`;
+    } else {
+        const intensity = Math.round(Math.abs(val) * 200);
+        return `rgb(${200 - intensity}, ${200 - intensity}, ${200 + Math.round(Math.abs(val) * 55)})`;
+    }
+}
+
+async function loadCorrelation() {
+    const res = await fetch('/api/correlation');
+    const json = await res.json();
+
+    if (json.error) {
+        document.getElementById('heatmap').innerHTML = `<p class="text-muted">${json.error}</p>`;
+        return;
+    }
+
+    document.getElementById('divScore').textContent = json.diversification_score;
+    const scoreEl = document.getElementById('divScore');
+    if (json.diversification_score >= 70) scoreEl.classList.add('text-profit');
+    else if (json.diversification_score < 40) scoreEl.classList.add('text-loss');
+
+    // Pairs table
+    document.querySelector('#pairsTable tbody').innerHTML = json.high_correlations.map(p =>
+        `<tr>
+            <td><strong>${p.ticker_a}</strong></td>
+            <td><strong>${p.ticker_b}</strong></td>
+            <td>${p.correlation.toFixed(3)}</td>
+            <td><span class="badge bg-warning">${p.warning}</span></td>
+        </tr>`
+    ).join('') || '<tr><td colspan="4" class="text-muted text-center">No highly correlated pairs found</td></tr>';
+
+    // Heatmap
+    const { matrix, tickers } = json;
+    const n = tickers.length;
+    let html = '<table style="border-collapse:collapse">';
+
+    // Header row
+    html += '<tr><td></td>';
+    for (const t of tickers) {
+        html += `<td class="corr-label">${t}</td>`;
+    }
+    html += '</tr>';
+
+    for (let i = 0; i < n; i++) {
+        html += `<tr><td style="font-size:0.7rem;font-weight:bold;padding-right:4px;text-align:right">${tickers[i]}</td>`;
+        for (let j = 0; j < n; j++) {
+            const val = matrix[i][j];
+            const bg = corrColor(val);
+            const textColor = Math.abs(val) > 0.5 ? '#fff' : '#333';
+            html += `<td class="corr-cell" style="background:${bg};color:${textColor}" title="${tickers[i]} vs ${tickers[j]}: ${val.toFixed(3)}">${val.toFixed(1)}</td>`;
+        }
+        html += '</tr>';
+    }
+    html += '</table>';
+    document.getElementById('heatmap').innerHTML = html;
+}
+
+loadCorrelation();
+</script>
+{% endblock %}

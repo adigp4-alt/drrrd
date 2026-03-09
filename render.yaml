@@ -1,16 +1,9 @@
-version: "1"
-projects:
-- name: Iran Tracker
-  environments:
-  - name: Production
-    services:
-    - type: web
-      name: iran-tracker
-      runtime: python
-      repo: https://github.com/adigp4-alt/drrrd
-      plan: free
-      envVars: []
-      region: oregon
-      buildCommand: pip install -r requirements.txt
-      startCommand: gunicorn main:app --bind 0.0.0.0:$PORT
-      autoDeployTrigger: commit
+services:
+  - type: web
+    name: iran-tracker
+    runtime: python
+    repo: https://github.com/adigp4-alt/drrrd
+    plan: free
+    region: oregon
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn main:app --bind 0.0.0.0:$PORT

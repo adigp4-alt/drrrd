@@ -57,3 +57,53 @@ def get_sentiment_label(score):
         return "Bearish"
     else:
         return "Neutral"
+
+def generate_daily_briefing(holdings_data, screener_cache):
+    """
+    Synthesizes portfolio performance and Screener ML probabilities into 
+    a personalized, conversational Natural Language brief.
+    """
+    if not holdings_data:
+        return "Good morning! You currently have no assets in your portfolio. Head over to the Portfolio tab to add some positions so I can analyze them."
+        
+    total_val = sum(h['market_value'] for h in holdings_data)
+    total_pnl = sum(h['pnl'] for h in holdings_data)
+    
+    # Sort holdings by allocation size
+    top_holdings = sorted(holdings_data, key=lambda x: x['allocation'], reverse=True)[:3]
+    
+    # Sentence 1: Macro Performance
+    direction = "up" if total_pnl >= 0 else "down"
+    briefing = f"Good morning! Your portfolio is currently valued at **${total_val:,.2f}**, and you are {direction} **${abs(total_pnl):,.2f}** overall. "
+    
+    # Sentence 2: Top Holdings Analysis
+    briefing += "Looking at your top allocations: "
+    holding_briefs = []
+    
+    for h in top_holdings:
+        ticker = h['ticker']
+        # Try to find ML data for this holding
+        ml_prob = None
+        for asset in screener_cache:
+            if asset.get('ticker') == ticker:
+                ml_prob = asset.get('ai_prob_num')
+                break
+                
+        if ml_prob:
+            if ml_prob >= 60:
+                outlook = "strong bullish accumulation"
+            elif ml_prob <= 40:
+                outlook = "bearish distribution"
+            else:
+                outlook = "neutral consolidation"
+                
+            holding_briefs.append(f"our Deep Learning ensemble detects **{outlook}** for **{ticker}** ({ml_prob}% uptrend probability)")
+        else:
+            holding_briefs.append(f"**{ticker}** is currently hovering around **${h['current_price']:.2f}**")
+            
+    if holding_briefs:
+        briefing += ", ".join(holding_briefs)[:-2] + ". "
+        
+    briefing += "You can use the AI Portfolio Optimizer to automatically balance your risk distribution for these assets."
+    
+    return briefing

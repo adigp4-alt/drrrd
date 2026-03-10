@@ -42,6 +42,23 @@ CREATE TABLE IF NOT EXISTS alert_history (
     message TEXT,
     triggered_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS ai_signal_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    date TEXT NOT NULL,
+    ticker TEXT NOT NULL,
+    price REAL,
+    change_pct REAL,
+    bullish_score INTEGER,
+    technical_signal TEXT,
+    ai_probability REAL,
+    ai_regime TEXT,
+    prophet_accuracy TEXT,
+    nlp_sentiment_score REAL,
+    consensus TEXT,
+    conviction TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
 """
 
 

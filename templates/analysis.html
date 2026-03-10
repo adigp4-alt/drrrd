@@ -51,6 +51,31 @@
 </div>
 
 <div class="row mb-3">
+    <div class="col-md-8">
+        <div class="card border-success shadow-sm h-100">
+            <div class="card-header bg-success text-white">
+                <i class="fas fa-robot me-1"></i> Prophet AI: 30-Day Personalized Forecast 
+                <span id="prophetAccuracyBadge" class="badge bg-light text-success ms-2" style="display:none;"></span>
+                <small class="float-end pt-1" style="font-size: 0.75rem; opacity: 0.8;">Powered by Meta Open Source</small>
+            </div>
+            <div class="card-body p-2" style="position: relative; height:350px;">
+                <canvas id="prophetChart"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-info shadow-sm h-100">
+            <div class="card-header bg-info text-white">
+                <i class="fas fa-brain me-1"></i> Explainable AI Rationale
+            </div>
+            <div class="card-body p-3" id="rationaleContainer">
+                <p class="text-muted text-center mt-5">Loading feature importance...</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-3">
     <div class="col-md-6">
         <div class="card">
             <div class="card-header">RSI (14)</div>
@@ -74,8 +99,9 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-let mainChart, rsiChart, macdChart;
+let mainChart, rsiChart, macdChart, prophetChartJs;
 let candleSeries, sma20Series, sma50Series, bbUpperSeries, bbLowerSeries;
 let rsiSeries, macdLineSeries, macdSignalSeries, macdHistSeries;
 let showSma20 = true, showSma50 = false, showBB = false;
@@ -141,8 +167,141 @@ async function loadAnalysis() {
     rsiChart.timeScale().fitContent();
     macdChart.timeScale().fitContent();
 
+    // Render Prophet Chart
+    const accuracyBadge = document.getElementById('prophetAccuracyBadge');
+    if (json.prophet_forecast) {
+        if (json.prophet_forecast.accuracy_score) {
+            accuracyBadge.textContent = `Historical Accuracy: ${json.prophet_forecast.accuracy_score}`;
+            accuracyBadge.style.display = 'inline-block';
+        } else {
+            accuracyBadge.style.display = 'none';
+        }
+        renderProphetChart(json.prophet_forecast, ticker);
+    } else {
+        accuracyBadge.style.display = 'none';
+        if (prophetChartJs) prophetChartJs.destroy();
+        const ctx = document.getElementById('prophetChart').getContext('2d');
+        ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+        ctx.font = "14px Arial";
+        ctx.fillStyle = "#666";
+        ctx.textAlign = "center";
+        ctx.fillText("Insufficient data for Prophet forecasting", ctx.canvas.width/2, ctx.canvas.height/2);
+    }
+    
+    // Render AI Rationale (Feature Importance)
+    const rationaleContainer = document.getElementById('rationaleContainer');
+    if (json.ai_rationale && Object.keys(json.ai_rationale).length > 0) {
+        let html = '<h6 class="mb-3">Top Driving Factors:</h6>';
+        for (const [feature, importance] of Object.entries(json.ai_rationale)) {
+            const widthPct = importance; // It's already a string with '%'
+            html += `
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between mb-1">
+                        <span class="small fw-bold">${feature}</span>
+                        <span class="small text-muted">${importance} weight</span>
+                    </div>
+                    <div class="progress" style="height: 8px;">
+                        <div class="progress-bar bg-info" role="progressbar" style="width: ${widthPct}"></div>
+                    </div>
+                </div>
+            `;
+        }
+        rationaleContainer.innerHTML = html;
+    } else {
+        rationaleContainer.innerHTML = '<p class="text-muted text-center mt-5">Rationale not available for this ticker.</p>';
+    }
+
     updateVisibility();
     loadNews(ticker);
+}
+
+function renderProphetChart(pf, ticker) {
+    const ctx = document.getElementById('prophetChart').getContext('2d');
+    if (prophetChartJs) prophetChartJs.destroy();
+    
+    // Combine dates for the x-axis (Historical + Forecast)
+    const allDates = pf.dates.concat(pf.forecast_dates);
+    
+    // Pad arrays so they align on the X-axis
+    const paddedHistorical = [...pf.historical_prices, ...Array(pf.forecast_dates.length).fill(null)];
+    
+    const paddedYhat = [...Array(pf.dates.length).fill(null), ...pf.yhat];
+    const paddedUpper = [...Array(pf.dates.length).fill(null), ...pf.yhat_upper];
+    const paddedLower = [...Array(pf.dates.length).fill(null), ...pf.yhat_lower];
+
+    prophetChartJs = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: allDates,
+            datasets: [
+                {
+                    label: 'Historical Close',
+                    data: paddedHistorical,
+                    borderColor: 'rgba(52, 152, 219, 1)',
+                    borderWidth: 2,
+                    pointRadius: 0,
+                    fill: false,
+                    tension: 0.1
+                },
+                {
+                    label: 'Prophet Forecast (yhat)',
+                    data: paddedYhat,
+                    borderColor: 'rgba(39, 174, 96, 1)',
+                    borderWidth: 2,
+                    borderDash: [5, 5],
+                    pointRadius: 0,
+                    fill: false,
+                    tension: 0.1
+                },
+                {
+                    label: 'Upper Confidence (80%)',
+                    data: paddedUpper,
+                    borderColor: 'rgba(39, 174, 96, 0.2)',
+                    backgroundColor: 'rgba(39, 174, 96, 0.1)',
+                    borderWidth: 1,
+                    pointRadius: 0,
+                    fill: '+1', // Fill down to the next dataset (lower confidence)
+                    tension: 0.1
+                },
+                {
+                    label: 'Lower Confidence (80%)',
+                    data: paddedLower,
+                    borderColor: 'rgba(39, 174, 96, 0.2)',
+                    borderWidth: 1,
+                    pointRadius: 0,
+                    fill: false,
+                    tension: 0.1
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            let label = context.dataset.label || '';
+                            if (label) { label += ': '; }
+                            if (context.parsed.y !== null) {
+                                label += new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(context.parsed.y);
+                            }
+                            return label;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: { ticks: { maxTicksLimit: 10 } },
+                y: {
+                    ticks: {
+                        callback: function(value) { return '$' + value; }
+                    }
+                }
+            }
+        }
+    });
 }
 
 function updateVisibility() {

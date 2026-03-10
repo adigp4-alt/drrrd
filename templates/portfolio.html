@@ -85,6 +85,22 @@
                     <div class="mt-2">Running historical analysis & generating efficient frontier...</div>
                 </div>
                 
+                <div class="row align-items-center mb-4 pb-3 border-bottom">
+                    <div class="col-12 col-md-6 form-group">
+                        <label for="riskProfile" class="fw-bold mb-1">Select Risk Profile:</label>
+                        <select id="riskProfile" class="form-select border-primary">
+                            <option value="Conservative">Conservative (Minimize Volatility)</option>
+                            <option value="Moderate" selected>Moderate (Maximize Sharpe Ratio)</option>
+                            <option value="Aggressive">Aggressive (Maximize Returns)</option>
+                        </select>
+                    </div>
+                    <div class="col-12 col-md-6 text-end mt-3 mt-md-0">
+                        <button class="btn btn-primary" onclick="runOptimization()">
+                            <i class="fas fa-play"></i> Run Allocator
+                        </button>
+                    </div>
+                </div>
+
                 <div id="optimizeError" class="alert alert-danger d-none mt-2"></div>
                 
                 <div id="optimizeResults" class="d-none">
@@ -206,16 +222,26 @@ async function optimizePortfolio() {
     const optimizeModal = new bootstrap.Modal(document.getElementById('optimizeModal'));
     optimizeModal.show();
     
+    // Default to 'Moderate' if the user hasn't selected anything yet and clicks Optimize at the top
+    const riskSelectEl = document.getElementById('riskProfile');
+    const riskProfile = riskSelectEl ? riskSelectEl.value : 'Moderate';
+    
+    runOptimization(riskProfile);
+}
+
+async function runOptimization(existingProfile) {
     const loadingEl = document.getElementById('optimizeLoading');
     const resultsEl = document.getElementById('optimizeResults');
     const errorEl = document.getElementById('optimizeError');
+    
+    const riskProfile = existingProfile || document.getElementById('riskProfile').value;
     
     loadingEl.classList.remove('d-none');
     resultsEl.classList.add('d-none');
     errorEl.classList.add('d-none');
     
     try {
-        const res = await fetch('/api/portfolio/optimize');
+        const res = await fetch(`/api/portfolio/optimize?risk_profile=${riskProfile}`);
         const json = await res.json();
         
         loadingEl.classList.add('d-none');

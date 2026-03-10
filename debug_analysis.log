@@ -1,0 +1,8 @@
+fetch_analysis_data called: ticker=LMT, period=6mo
+df.empty=False, shape=(125, 5), cols_type=<class 'pandas.MultiIndex'>
+fetch_analysis_data called: ticker=LMT, period=6mo
+df.empty=False, shape=(125, 5), cols_type=<class 'pandas.MultiIndex'>
+fetch_analysis_data called: ticker=LMT, period=6mo
+df.empty=False, shape=(125, 5), cols_type=<class 'pandas.MultiIndex'>
+fetch_analysis_data called: ticker=LMT, period=6mo
+df.empty=False, shape=(125, 5), cols_type=<class 'pandas.MultiIndex'>

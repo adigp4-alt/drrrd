@@ -70,7 +70,7 @@ def check_alerts(current_data, ml_predictions=None, ml_features=None):
     if inserts or updates:
         with get_db() as db:
             if inserts:
-                db.executemany("INSERT INTO alert_history (rule_id, ticker, message, timestamp) VALUES (?, ?, ?, ?)", inserts)
+                db.executemany("INSERT INTO alert_history (rule_id, ticker, message, triggered_at) VALUES (?, ?, ?, ?)", inserts)
             if updates:
                 db.executemany("UPDATE alert_rules SET last_triggered = ? WHERE id = ?", updates)
             db.commit()

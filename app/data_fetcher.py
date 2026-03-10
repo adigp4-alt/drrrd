@@ -31,7 +31,7 @@ def fetch_prices():
     tickers_str = " ".join(ALL_TICKERS)
 
     try:
-        raw = yf.download(tickers_str, period="5d", group_by="ticker", progress=False, session=yf_session)
+        raw = yf.download(tickers_str, period="5d", group_by="ticker", progress=False)
     except Exception as e:
         logger.error(f"  yfinance error: {e}")
         return {}
@@ -94,7 +94,7 @@ def fetch_history_data(days=30):
     logger.info(f"  Fetching {days}-day history...")
     tickers_str = " ".join(ALL_TICKERS)
     try:
-        raw = yf.download(tickers_str, period=f"{days}d", group_by="ticker", progress=False, session=yf_session)
+        raw = yf.download(tickers_str, period=f"{days}d", group_by="ticker", progress=False)
         history = {}
         for sym in ALL_TICKERS:
             try:
@@ -117,7 +117,7 @@ def fetch_history_data(days=30):
 def fetch_analysis_data(ticker, period="6mo"):
     """Fetch OHLCV data for technical analysis."""
     try:
-        df = yf.download(ticker, period=period, progress=False, session=yf_session)
+        df = yf.download(ticker, period=period, progress=False)
         if df.empty:
             return None
             

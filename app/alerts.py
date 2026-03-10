@@ -1,17 +1,16 @@
-"""Alert engine and Telegram integration."""
-
 import os
-from datetime import datetime
-
+from datetime import datetime, timedelta
 import requests
+from app.models import query_db, get_db
 
-from app.models import query_db, execute_db, get_db
-
-
-def check_alerts(current_data):
-    """Evaluate all enabled alert rules against live data."""
+def check_alerts(current_data, ml_predictions=None, ml_features=None):
     rules = query_db("SELECT * FROM alert_rules WHERE enabled = 1")
     triggered = []
+    now = datetime.now()
+    now_str = now.strftime("%Y-%m-%d %H:%M:%S")
+
+    inserts = []
+    updates = []
 
     for rule in rules:
         ticker = rule["ticker"]
@@ -24,6 +23,16 @@ def check_alerts(current_data):
         volume = stock.get("volume", 0)
         condition = rule["condition"]
         threshold = rule["threshold"]
+        
+        last_triggered = rule.get("last_triggered")
+        if last_triggered:
+            try:
+                lt_dt = datetime.strptime(last_triggered, "%Y-%m-%d %H:%M:%S")
+                if now - lt_dt < timedelta(hours=24):
+                    continue
+            except ValueError:
+                pass
+                
         fired = False
         message = ""
 
@@ -40,26 +49,35 @@ def check_alerts(current_data):
         elif condition == "volume_spike" and volume >= threshold:
             message = f"{ticker} volume spike: {volume:,} (threshold {threshold:,.0f})"
             fired = True
+            
+        if not fired and ml_predictions and ml_features:
+            regime = ml_predictions.get(ticker, {}).get("regime")
+            if condition == "regime_change" and regime and regime == threshold:
+                message = f"{ticker} entered new regime: {regime}"
+                fired = True
+                
+            bb_width = ml_features.get(ticker, {}).get("bb_width")
+            if condition == "bollinger_squeeze" and bb_width is not None and bb_width <= threshold:
+                message = f"{ticker} Bollinger Band squeeze detected (width {bb_width:.3f} <= {threshold})"
+                fired = True
 
         if fired:
-            now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            execute_db(
-                "INSERT INTO alert_history (rule_id, ticker, message) VALUES (?, ?, ?)",
-                (rule["id"], ticker, message)
-            )
-            with get_db() as db:
-                db.execute(
-                    "UPDATE alert_rules SET last_triggered = ? WHERE id = ?",
-                    (now, rule["id"])
-                )
-            triggered.append({"ticker": ticker, "message": message, "time": now})
+            inserts.append((rule["id"], ticker, message, now_str))
+            updates.append((now_str, rule["id"]))
+            triggered.append({"ticker": ticker, "message": message, "time": now_str})
             send_telegram(message)
+
+    if inserts or updates:
+        with get_db() as db:
+            if inserts:
+                db.executemany("INSERT INTO alert_history (rule_id, ticker, message, timestamp) VALUES (?, ?, ?, ?)", inserts)
+            if updates:
+                db.executemany("UPDATE alert_rules SET last_triggered = ? WHERE id = ?", updates)
+            db.commit()
 
     return triggered
 
-
 def send_telegram(message):
-    """Send alert via Telegram bot if configured."""
     token = os.environ.get("TELEGRAM_BOT_TOKEN")
     chat_id = os.environ.get("TELEGRAM_CHAT_ID")
     if not token or not chat_id:

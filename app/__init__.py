@@ -1,6 +1,5 @@
 """Flask application factory."""
 
-import os
 import threading
 
 from flask import Flask
@@ -26,7 +25,7 @@ def create_app():
     from app.routes import (
         dashboard, portfolio, analysis, alerts_api,
         watchlist, export, screener, backtest, stat_arb,
-        remote_api,
+        remote_api, whatsapp_webhook,
     )
     app.register_blueprint(dashboard.bp)
     app.register_blueprint(portfolio.bp)
@@ -38,6 +37,7 @@ def create_app():
     app.register_blueprint(backtest.bp)
     app.register_blueprint(stat_arb.bp)
     app.register_blueprint(remote_api.bp)
+    app.register_blueprint(whatsapp_webhook.bp)
 
     # Startup: fetch data and start scheduler
     def _startup():
@@ -47,10 +47,5 @@ def create_app():
         start_scheduler()
 
     threading.Thread(target=_startup, daemon=True).start()
-
-    # Start Telegram bot if token is configured
-    if os.environ.get("TELEGRAM_BOT_TOKEN"):
-        from app.telegram_bot import start_bot
-        start_bot()
 
     return app

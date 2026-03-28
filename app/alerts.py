@@ -65,7 +65,7 @@ def check_alerts(current_data, ml_predictions=None, ml_features=None):
             inserts.append((rule["id"], ticker, message, now_str))
             updates.append((now_str, rule["id"]))
             triggered.append({"ticker": ticker, "message": message, "time": now_str})
-            send_telegram(message)
+            send_whatsapp(message)
 
     if inserts or updates:
         with get_db() as db:
@@ -77,14 +77,6 @@ def check_alerts(current_data, ml_predictions=None, ml_features=None):
 
     return triggered
 
-def send_telegram(message):
-    token = os.environ.get("TELEGRAM_BOT_TOKEN")
-    chat_id = os.environ.get("TELEGRAM_CHAT_ID")
-    if not token or not chat_id:
-        return False
-    try:
-        url = f"https://api.telegram.org/bot{token}/sendMessage"
-        resp = requests.post(url, json={"chat_id": chat_id, "text": message}, timeout=10)
-        return resp.ok
-    except Exception:
-        return False
+def send_whatsapp(message):
+    from app.whatsapp_bot import send_whatsapp as _send
+    return _send(message)

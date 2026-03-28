@@ -1,6 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Dashboard — Iran Investment Tracker{% endblock %}
 
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/socket.io@4.7.5/dist/socket.io.min.js"></script>
+{% endblock %}
+
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
     <div>
@@ -72,22 +76,27 @@
 <script>
 let allStocks = [];
 let stockChart = null;
+let tickerOrder = [];
 
 async function loadData() {
     const res = await fetch('/api/prices');
     const json = await res.json();
+    tickerOrder = json.ticker_order || [];
+    updateDisplay(json);
+}
 
+function updateDisplay(json) {
     if (json.last_updated) {
         document.getElementById('lastUpdated').textContent = 'Last updated: ' + json.last_updated;
     }
 
-    allStocks = json.ticker_order
-        .filter(sym => json.tickers[sym])
+    allStocks = tickerOrder
+        .filter(sym => json.tickers && json.tickers[sym])
         .map(sym => json.tickers[sym]);
 
     renderAlerts(json.alerts || []);
     applyFilters();
-    renderChart(allStocks.slice(0, 10));
+    if (allStocks.length) renderChart(allStocks.slice(0, 10));
 }
 
 function renderAlerts(alerts) {
@@ -172,12 +181,46 @@ document.getElementById('refreshBtn').addEventListener('click', async function (
     this.disabled = true;
     this.textContent = 'Refreshing...';
     await fetch('/api/refresh', { method: 'POST' });
-    await loadData();
-    this.disabled = false;
-    this.textContent = 'Refresh Now';
+    // UI update arrives via 'refresh_complete' socket event.
+    // Fallback: re-enable button after 15s if socket event doesn't arrive.
+    setTimeout(() => {
+        if (this.disabled) {
+            this.disabled = false;
+            this.textContent = 'Refresh Now';
+            loadData();
+        }
+    }, 15000);
 });
 
+// --- WebSocket live updates ---
+let fallbackTimer = null;
+const socket = io();
+
+socket.on('connect', () => {
+    if (fallbackTimer) { clearInterval(fallbackTimer); fallbackTimer = null; }
+});
+
+socket.on('price_update', (data) => {
+    updateDisplay(data);
+});
+
+socket.on('refresh_complete', (data) => {
+    updateDisplay(data);
+    const btn = document.getElementById('refreshBtn');
+    btn.disabled = false;
+    btn.textContent = 'Refresh Now';
+});
+
+socket.on('disconnect', () => {
+    // Graceful fallback to HTTP polling when WebSocket drops
+    if (!fallbackTimer) fallbackTimer = setInterval(loadData, 60000);
+});
+
+socket.on('connect_error', () => {
+    if (!fallbackTimer) fallbackTimer = setInterval(loadData, 60000);
+});
+
+// Initial HTTP load (populates tickerOrder / tier metadata)
 loadData();
-setInterval(loadData, 60000);
 </script>
 {% endblock %}

@@ -33,6 +33,15 @@ def api_history():
 @bp.route("/api/refresh", methods=["POST"])
 def api_refresh():
     fetch_prices()
+    try:
+        from app.extensions import socketio
+        socketio.emit("refresh_complete", {
+            "tickers": CACHE["data"],
+            "last_updated": CACHE["last_updated"],
+            "alerts": CACHE["alerts"],
+        })
+    except Exception:
+        pass
     return jsonify({"status": "ok", "last_updated": CACHE["last_updated"]})
 
 

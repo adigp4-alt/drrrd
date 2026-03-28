@@ -1,5 +1,6 @@
 """Flask application factory."""
 
+import os
 import threading
 
 from flask import Flask
@@ -21,11 +22,16 @@ def create_app():
     # Initialize database
     init_db()
 
+    # Start Discord bot early (before eventlet scheduler to avoid loop conflicts)
+    if os.environ.get("DISCORD_BOT_TOKEN"):
+        from app.discord_bot import start_bot
+        start_bot()
+
     # Register blueprints
     from app.routes import (
         dashboard, portfolio, analysis, alerts_api,
         watchlist, export, screener, backtest, stat_arb,
-        remote_api, whatsapp_webhook,
+        remote_api,
     )
     app.register_blueprint(dashboard.bp)
     app.register_blueprint(portfolio.bp)
@@ -37,7 +43,6 @@ def create_app():
     app.register_blueprint(backtest.bp)
     app.register_blueprint(stat_arb.bp)
     app.register_blueprint(remote_api.bp)
-    app.register_blueprint(whatsapp_webhook.bp)
 
     # Startup: fetch data and start scheduler
     def _startup():

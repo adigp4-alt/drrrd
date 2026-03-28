@@ -65,7 +65,7 @@ def check_alerts(current_data, ml_predictions=None, ml_features=None):
             inserts.append((rule["id"], ticker, message, now_str))
             updates.append((now_str, rule["id"]))
             triggered.append({"ticker": ticker, "message": message, "time": now_str})
-            send_whatsapp(message)
+            send_discord(message)
 
     if inserts or updates:
         with get_db() as db:
@@ -77,6 +77,6 @@ def check_alerts(current_data, ml_predictions=None, ml_features=None):
 
     return triggered
 
-def send_whatsapp(message):
-    from app.whatsapp_bot import send_whatsapp as _send
+def send_discord(message):
+    from app.discord_bot import send_discord as _send
     return _send(message)

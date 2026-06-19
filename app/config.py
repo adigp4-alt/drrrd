@@ -20,6 +20,9 @@ PRICE_FETCH_INTERVAL = int(os.environ.get("PRICE_FETCH_INTERVAL", "5"))
 AUTO_SCAN_INTERVAL = int(os.environ.get("AUTO_SCAN_INTERVAL", "30"))
 HISTORY_FETCH_HOURS = int(os.environ.get("HISTORY_FETCH_HOURS", "6"))
 
+# Hour of day (0-23, server time) to send the daily email digest
+DIGEST_HOUR = int(os.environ.get("DIGEST_HOUR", "17"))
+
 TIERS = {
     "T1": {
         "name": "Post-Conflict Reconstruction",

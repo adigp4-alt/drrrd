@@ -33,6 +33,7 @@ def create_app():
     from app.routes import (
         dashboard, portfolio, analysis, alerts_api, watchlist,
         export, autonomous, history, news,
+        backtest, risk, screener, tools,
     )
     app.register_blueprint(dashboard.bp)
     app.register_blueprint(portfolio.bp)
@@ -43,6 +44,10 @@ def create_app():
     app.register_blueprint(autonomous.bp)
     app.register_blueprint(history.bp)
     app.register_blueprint(news.bp)
+    app.register_blueprint(backtest.bp)
+    app.register_blueprint(risk.bp)
+    app.register_blueprint(screener.bp)
+    app.register_blueprint(tools.bp)
 
     @app.route("/health")
     def health_check():

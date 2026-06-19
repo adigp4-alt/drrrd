@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}Screener — Iran Investment Tracker{% endblock %}
+
+{% block content %}
+<h2 class="mb-3">Stock Screener</h2>
+<p class="text-muted">Scan all 36 tickers and filter by signal, RSI band, daily move, or tier.</p>
+
+<div class="card mb-3">
+    <div class="card-body">
+        <div class="row g-2 align-items-end">
+            <div class="col-md-2">
+                <label class="form-label small mb-1">Signal</label>
+                <select id="fSignal" class="form-select form-select-sm">
+                    <option value="">Any</option>
+                    <option value="oversold">Oversold (RSI≤30)</option>
+                    <option value="overbought">Overbought (RSI≥70)</option>
+                    <option value="neutral">Neutral</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-1">RSI min</label>
+                <input id="fRsiMin" type="number" class="form-control form-control-sm" placeholder="0">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-1">RSI max</label>
+                <input id="fRsiMax" type="number" class="form-control form-control-sm" placeholder="100">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-1">Min |change| %</label>
+                <input id="fChange" type="number" step="any" class="form-control form-control-sm" placeholder="0">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-1">Tier</label>
+                <select id="fTier" class="form-select form-select-sm">
+                    <option value="">All</option>
+                    <option value="T1">T1</option><option value="T2">T2</option>
+                    <option value="T3">T3</option><option value="T4">T4</option><option value="T5">T5</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <button id="scanBtn" class="btn btn-primary btn-sm w-100">Scan</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="mb-2 text-muted small" id="matchInfo"></div>
+
+<div class="card">
+    <div class="card-body p-0">
+        <table class="table table-hover mb-0" id="resTable">
+            <thead class="table-dark">
+                <tr><th>Ticker</th><th>Tier</th><th>Price</th><th>Change</th><th>RSI</th><th>Signal</th><th>Volume</th></tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function badge(sig) {
+    if (sig === 'oversold') return '<span class="badge badge-bullish">oversold</span>';
+    if (sig === 'overbought') return '<span class="badge badge-bearish">overbought</span>';
+    return '<span class="badge badge-neutral">neutral</span>';
+}
+
+async function scan() {
+    const params = new URLSearchParams();
+    const sig = document.getElementById('fSignal').value;
+    const rmin = document.getElementById('fRsiMin').value;
+    const rmax = document.getElementById('fRsiMax').value;
+    const chg = document.getElementById('fChange').value;
+    const tier = document.getElementById('fTier').value;
+    if (sig) params.set('signal', sig);
+    if (rmin) params.set('rsi_min', rmin);
+    if (rmax) params.set('rsi_max', rmax);
+    if (chg) params.set('change_min', chg);
+    if (tier) params.set('tier', tier);
+
+    const res = await fetch('/api/screener?' + params.toString());
+    const json = await res.json();
+    if (json.error) { document.getElementById('matchInfo').textContent = json.error; return; }
+
+    document.getElementById('matchInfo').textContent =
+        `Matched ${json.matched} of ${json.total_scanned} tickers`;
+
+    const tbody = document.querySelector('#resTable tbody');
+    if (!json.results.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">No matches</td></tr>';
+        return;
+    }
+    tbody.innerHTML = json.results.map(r => {
+        const ccls = (r.change_pct || 0) >= 0 ? 'text-profit' : 'text-loss';
+        return `<tr>
+            <td><strong>${r.ticker}</strong> <span class="small text-muted">${r.name}</span></td>
+            <td><span class="badge bg-secondary">${r.tier}</span></td>
+            <td>${r.price != null ? '$' + r.price.toFixed(2) : '—'}</td>
+            <td class="${ccls}">${r.change_pct != null ? (r.change_pct >= 0 ? '+' : '') + r.change_pct.toFixed(2) + '%' : '—'}</td>
+            <td>${r.rsi != null ? r.rsi.toFixed(1) : '—'}</td>
+            <td>${badge(r.signal)}</td>
+            <td>${r.volume != null ? r.volume.toLocaleString() : '—'}</td>
+        </tr>`;
+    }).join('');
+}
+
+document.getElementById('scanBtn').addEventListener('click', scan);
+scan();
+</script>
+{% endblock %}

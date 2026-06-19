@@ -161,6 +161,32 @@ def generate_performance_summary(current_prices, history_data):
     }
 
 
+def build_digest_text(current_prices):
+    """Build a plain-text daily digest summary for email."""
+    if not current_prices:
+        return "Iran Investment Tracker — no market data available today."
+
+    summary = generate_performance_summary(current_prices, {})
+    lines = [
+        "IRAN INVESTMENT TRACKER — DAILY DIGEST",
+        f"Generated: {summary['generated_at']}",
+        f"Tickers tracked: {summary['total_tickers']}",
+        "",
+        "TOP GAINERS:",
+    ]
+    for g in summary["top_gainers"]:
+        lines.append(f"  {g['ticker']:6} ${g['price']:.2f}  {g['change_pct']:+.2f}%")
+    lines.append("")
+    lines.append("TOP LOSERS:")
+    for l_item in summary["top_losers"]:
+        lines.append(f"  {l_item['ticker']:6} ${l_item['price']:.2f}  {l_item['change_pct']:+.2f}%")
+    lines.append("")
+    lines.append("TIER PERFORMANCE (avg daily change):")
+    for tid, tp in summary["tier_performance"].items():
+        lines.append(f"  {tid} {tp['name']:38} {tp['avg_change']:+.2f}%")
+    return "\n".join(lines)
+
+
 def _styled_table(data, header_color, col_widths=None):
     """Build a reportlab Table with consistent styling."""
     table = Table(data, repeatRows=1, colWidths=col_widths)

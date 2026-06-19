@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Heatmap — Iran Investment Tracker{% endblock %}
+
+{% block style %}
+.heat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; }
+.heat-tile { border-radius: 8px; padding: 12px 8px; text-align: center; color: #fff;
+             text-shadow: 0 1px 2px rgba(0,0,0,0.4); }
+.heat-tile .t-sym { font-weight: 700; font-size: 1.05rem; }
+.heat-tile .t-price { font-size: 0.8rem; opacity: 0.95; }
+.heat-tile .t-chg { font-size: 0.95rem; font-weight: 600; margin-top: 2px; }
+.tier-section h5 { margin: 18px 0 8px; }
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="mb-0">Performance Heatmap</h2>
+    <span class="text-muted small" id="updated"></span>
+</div>
+<p class="text-muted">Color = daily % change (green up, red down). Grouped by tier.</p>
+
+<div id="loadingSpinner" class="text-center mb-3">
+    <div class="spinner-border text-primary" role="status"></div>
+</div>
+
+<div id="heatArea"></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Map a change% to a red→green color. Saturates around ±5%.
+function heatColor(pct) {
+    const capped = Math.max(-5, Math.min(5, pct || 0));
+    if (capped >= 0) {
+        const a = 0.25 + (capped / 5) * 0.75;
+        return `rgba(39, 174, 96, ${a.toFixed(2)})`;
+    } else {
+        const a = 0.25 + (Math.abs(capped) / 5) * 0.75;
+        return `rgba(231, 76, 60, ${a.toFixed(2)})`;
+    }
+}
+
+async function load() {
+    const res = await fetch('/api/prices');
+    const json = await res.json();
+    document.getElementById('loadingSpinner').style.display = 'none';
+    if (json.last_updated) {
+        document.getElementById('updated').textContent = 'Updated: ' + json.last_updated;
+    }
+
+    const tiers = json.tiers || {};
+    const order = json.ticker_order || [];
+    const byTier = {};
+    order.forEach(sym => {
+        const d = json.tickers[sym];
+        if (!d) return;
+        (byTier[d.tier] = byTier[d.tier] || []).push(d);
+    });
+
+    const area = document.getElementById('heatArea');
+    if (!Object.keys(byTier).length) {
+        area.innerHTML = '<p class="text-muted text-center py-4">No price data yet.</p>';
+        return;
+    }
+
+    area.innerHTML = Object.keys(tiers).map(tid => {
+        const items = byTier[tid] || [];
+        if (!items.length) return '';
+        const tiles = items.map(d => `
+            <div class="heat-tile" style="background:${heatColor(d.change_pct)}">
+                <div class="t-sym">${d.ticker}</div>
+                <div class="t-price">$${d.price.toFixed(2)}</div>
+                <div class="t-chg">${d.change_pct >= 0 ? '+' : ''}${d.change_pct.toFixed(2)}%</div>
+            </div>`).join('');
+        return `<div class="tier-section">
+            <h5><span class="badge" style="background:${tiers[tid].color}">${tid}</span> ${tiers[tid].name}</h5>
+            <div class="heat-grid">${tiles}</div>
+        </div>`;
+    }).join('');
+}
+load();
+setInterval(load, 60000);
+</script>
+{% endblock %}

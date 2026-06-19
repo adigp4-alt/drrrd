@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% block title %}Backtest — Iran Investment Tracker{% endblock %}
+
+{% block content %}
+<h2 class="mb-3">Strategy Backtester</h2>
+<p class="text-muted">Simulate a signal strategy on historical data and compare it to buy-and-hold. Starts with $10,000.</p>
+
+<div class="row mb-3 g-2">
+    <div class="col-md-4">
+        <select id="tickerSelect" class="form-select"><option value="">Select a ticker...</option></select>
+    </div>
+    <div class="col-md-3">
+        <select id="strategySelect" class="form-select">
+            {% for key, label in strategies.items() %}
+            <option value="{{ key }}">{{ label }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="col-md-3">
+        <select id="periodSelect" class="form-select">
+            <option value="3mo">3 Months</option>
+            <option value="6mo">6 Months</option>
+            <option value="1y" selected>1 Year</option>
+            <option value="2y">2 Years</option>
+        </select>
+    </div>
+    <div class="col-md-2">
+        <button id="runBtn" class="btn btn-primary w-100" disabled>Run</button>
+    </div>
+</div>
+
+<div id="loadingSpinner" class="text-center d-none mb-3">
+    <div class="spinner-border text-primary" role="status"></div>
+    <p class="text-muted mt-2">Running backtest...</p>
+</div>
+
+<div id="emptyState" class="text-center text-muted py-5"><p>Pick a ticker and strategy, then Run.</p></div>
+
+<div id="results" style="display:none">
+    <div class="row mb-3">
+        <div class="col-md-3"><div class="card stat-card"><div class="label">Strategy Return</div><div class="value" id="rStratRet">—</div></div></div>
+        <div class="col-md-3"><div class="card stat-card"><div class="label">Buy &amp; Hold</div><div class="value" id="rBuyHold">—</div></div></div>
+        <div class="col-md-3"><div class="card stat-card"><div class="label">Outperformance</div><div class="value" id="rOut">—</div></div></div>
+        <div class="col-md-3"><div class="card stat-card"><div class="label">Final Value</div><div class="value" id="rFinal">—</div></div></div>
+    </div>
+    <div class="row mb-4">
+        <div class="col-md-3"><div class="card stat-card"><div class="label">Trades</div><div class="value" id="rTrades">—</div></div></div>
+        <div class="col-md-3"><div class="card stat-card"><div class="label">Win Rate</div><div class="value" id="rWin">—</div></div></div>
+        <div class="col-md-3"><div class="card stat-card"><div class="label">Max Drawdown</div><div class="value text-loss" id="rDD">—</div></div></div>
+        <div class="col-md-3"><div class="card stat-card"><div class="label">Best / Worst Trade</div><div class="value" id="rBW" style="font-size:1.1rem">—</div></div></div>
+    </div>
+    <div class="card">
+        <div class="card-header" id="eqTitle">Equity Curve</div>
+        <div class="card-body"><canvas id="equityChart" height="90"></canvas></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let equityChart = null;
+
+async function loadTickers() {
+    const res = await fetch('/api/prices');
+    const json = await res.json();
+    const sel = document.getElementById('tickerSelect');
+    json.ticker_order.forEach(sym => {
+        const d = json.tickers[sym];
+        if (!d) return;
+        const o = document.createElement('option');
+        o.value = sym; o.textContent = `${sym} — ${d.name}`;
+        sel.appendChild(o);
+    });
+    document.getElementById('runBtn').disabled = false;
+}
+
+function fmtPct(v) { return (v >= 0 ? '+' : '') + v.toFixed(2) + '%'; }
+function cls(v) { return v >= 0 ? 'text-profit' : 'text-loss'; }
+
+async function run() {
+    const ticker = document.getElementById('tickerSelect').value;
+    if (!ticker) { alert('Select a ticker first'); return; }
+    const strategy = document.getElementById('strategySelect').value;
+    const period = document.getElementById('periodSelect').value;
+
+    document.getElementById('loadingSpinner').classList.remove('d-none');
+    document.getElementById('emptyState').style.display = 'none';
+    try {
+        const res = await fetch(`/api/backtest/${ticker}?strategy=${strategy}&period=${period}`);
+        const r = await res.json();
+        if (r.error) { alert(r.error); return; }
+
+        document.getElementById('results').style.display = '';
+        const sr = document.getElementById('rStratRet');
+        sr.textContent = fmtPct(r.total_return); sr.className = 'value ' + cls(r.total_return);
+        const bh = document.getElementById('rBuyHold');
+        bh.textContent = fmtPct(r.buy_hold_return); bh.className = 'value ' + cls(r.buy_hold_return);
+        const out = document.getElementById('rOut');
+        out.textContent = fmtPct(r.outperformance); out.className = 'value ' + cls(r.outperformance);
+        document.getElementById('rFinal').textContent = '$' + r.final_value.toLocaleString();
+        document.getElementById('rTrades').textContent = r.num_trades + (r.still_holding ? ' (open)' : '');
+        document.getElementById('rWin').textContent = r.win_rate + '%';
+        document.getElementById('rDD').textContent = '-' + r.max_drawdown + '%';
+        document.getElementById('rBW').innerHTML =
+            `<span class="text-profit">${fmtPct(r.best_trade)}</span> / <span class="text-loss">${fmtPct(r.worst_trade)}</span>`;
+
+        document.getElementById('eqTitle').textContent =
+            `${r.ticker} — ${r.strategy_label} (${r.period})`;
+
+        const labels = r.equity_curve.map(p => p.date);
+        const equity = r.equity_curve.map(p => p.equity);
+        const ctx = document.getElementById('equityChart').getContext('2d');
+        if (equityChart) equityChart.destroy();
+        equityChart = new Chart(ctx, {
+            type: 'line',
+            data: { labels, datasets: [{
+                label: 'Strategy Equity ($)', data: equity,
+                borderColor: '#2E86C1', backgroundColor: 'rgba(46,134,193,0.1)',
+                fill: true, tension: 0.2, pointRadius: 0,
+            }]},
+            options: { responsive: true, plugins: { legend: { position: 'top' } },
+                       scales: { y: { title: { display: true, text: 'Portfolio Value ($)' } } } }
+        });
+    } finally {
+        document.getElementById('loadingSpinner').classList.add('d-none');
+    }
+}
+
+document.getElementById('runBtn').addEventListener('click', run);
+loadTickers();
+</script>
+{% endblock %}

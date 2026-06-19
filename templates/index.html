@@ -124,6 +124,49 @@
 
     #countdown { font-variant-numeric: tabular-nums; font-weight: 600; }
 
+    .search-box, .sort-box {
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-primary);
+      padding: 6px 10px;
+      font-size: 13px;
+      outline: none;
+    }
+    .search-box { min-width: 150px; }
+    .search-box:focus, .sort-box:focus { border-color: var(--accent); }
+
+    /* ── Summary Bar ── */
+    .summary {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      padding: 14px 24px;
+      border-bottom: 1px solid var(--border);
+    }
+    .summary:empty { display: none; }
+    .stat {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 14px;
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+    .stat strong {
+      display: block;
+      font-size: 16px;
+      color: var(--text-primary);
+      font-variant-numeric: tabular-nums;
+      text-transform: none;
+      letter-spacing: 0;
+      margin-bottom: 2px;
+    }
+    .stat.up strong { color: var(--green); }
+    .stat.down strong { color: var(--red); }
+
     /* ── Main Content ── */
     main { padding: 20px 24px; max-width: 1400px; margin: 0 auto; }
 
@@ -301,8 +344,16 @@
 <div class="controls">
   <button id="btn-refresh" class="btn" onclick="manualRefresh()">Refresh Prices</button>
   <a href="/api/download/csv" class="btn btn-download">Download CSV</a>
+  <input id="search" class="search-box" type="text" placeholder="Filter ticker or name…" oninput="applyFilter()">
+  <select id="sort" class="sort-box" onchange="applySort()">
+    <option value="default">Sort: Tier order</option>
+    <option value="gainers">Sort: Top gainers</option>
+    <option value="losers">Sort: Top losers</option>
+  </select>
   <span class="auto-refresh-info">Auto-refresh in <span id="countdown">30</span>s</span>
 </div>
+
+<div id="summary" class="summary"></div>
 
 <main>
   <section class="tier-section" id="section-T1" style="--tier-color:#C0392B">
@@ -372,6 +423,9 @@
   let sparkCharts = {};
   let countdown = 30;
   let countdownTimer = null;
+  let latestData = null;       // last /api/prices payload, for re-render on sort/filter
+  let currentSort = 'default';
+  let currentFilter = '';
 
   // ── Helpers ──
   function formatVol(n) {
@@ -379,6 +433,10 @@
     if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
     if (n >= 1e3) return (n / 1e3).toFixed(0) + 'K';
     return String(n);
+  }
+
+  function fmtPct(pct) {
+    return (pct > 0 ? '+' : '') + pct.toFixed(2) + '%';
   }
 
   function changeBadge(pct) {
@@ -429,6 +487,8 @@
 
   // ── Render Dashboard ──
   function renderDashboard(data) {
+    latestData = data;
+
     // Update tier headers from API
     const tiers = data.tiers || {};
     for (const [tid, tmeta] of Object.entries(tiers)) {
@@ -439,21 +499,67 @@
         `${tmeta.difficulty} · ${tmeta.horizon} · ${tmeta.min_capital}`;
     }
 
-    // Group tickers by tier
+    renderSummary(data);
+    renderGrids();
+  }
+
+  // ── Summary Bar (computed across all tickers) ──
+  function renderSummary(data) {
+    const el = document.getElementById('summary');
+    const stocks = Object.values(data.tickers || {});
+    if (!stocks.length) { el.innerHTML = ''; return; }
+
+    const up = stocks.filter(s => s.change_pct > 0).length;
+    const down = stocks.filter(s => s.change_pct < 0).length;
+    const sorted = [...stocks].sort((a, b) => b.change_pct - a.change_pct);
+    const top = sorted[0];
+    const bottom = sorted[sorted.length - 1];
+
+    el.innerHTML = `
+      <div class="stat"><strong>${stocks.length}</strong>Tracked</div>
+      <div class="stat up"><strong>${up}</strong>Advancing</div>
+      <div class="stat down"><strong>${down}</strong>Declining</div>
+      <div class="stat up"><strong>${top.ticker} ${fmtPct(top.change_pct)}</strong>Top gainer</div>
+      <div class="stat down"><strong>${bottom.ticker} ${fmtPct(bottom.change_pct)}</strong>Top loser</div>
+    `;
+  }
+
+  // ── Render tier grids honoring current sort + filter ──
+  function renderGrids() {
+    if (!latestData) return;
+    const data = latestData;
+    const filter = currentFilter.trim().toLowerCase();
+
+    // Group tickers by tier, preserving API order
     const byTier = { T1: [], T2: [], T3: [], T4: [], T5: [] };
     for (const sym of (data.ticker_order || [])) {
       const d = data.tickers[sym];
       if (d && byTier[d.tier]) byTier[d.tier].push(d);
     }
 
-    // Render each tier grid
     for (const tid of ['T1', 'T2', 'T3', 'T4', 'T5']) {
       const grid = document.getElementById('grid-' + tid);
       if (!grid) continue;
-      const stocks = byTier[tid];
+      let stocks = byTier[tid];
 
-      if (!stocks || stocks.length === 0) {
-        grid.innerHTML = '<div class="placeholder-card">No data available</div>';
+      // Filter
+      if (filter) {
+        stocks = stocks.filter(d =>
+          d.ticker.toLowerCase().includes(filter) ||
+          d.name.toLowerCase().includes(filter));
+      }
+
+      // Sort
+      if (currentSort === 'gainers') {
+        stocks = [...stocks].sort((a, b) => b.change_pct - a.change_pct);
+      } else if (currentSort === 'losers') {
+        stocks = [...stocks].sort((a, b) => a.change_pct - b.change_pct);
+      }
+
+      if (!stocks.length) {
+        grid.innerHTML = filter
+          ? '<div class="placeholder-card">No matches</div>'
+          : '<div class="placeholder-card">No data available</div>';
         continue;
       }
 
@@ -473,11 +579,21 @@
         </div>
       `).join('');
 
-      // Draw sparklines for available history
       for (const d of stocks) {
         renderSparkline(d.ticker);
       }
     }
+  }
+
+  // ── Sort / Filter controls ──
+  function applySort() {
+    currentSort = document.getElementById('sort').value;
+    renderGrids();
+  }
+
+  function applyFilter() {
+    currentFilter = document.getElementById('search').value;
+    renderGrids();
   }
 
   // ── Alerts ──

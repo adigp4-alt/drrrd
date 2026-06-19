@@ -7,8 +7,6 @@ Flask server that fetches live stock data and serves the dashboard.
 import csv
 import json
 import os
-import threading
-import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -88,8 +86,6 @@ for tid, tdata in TIERS.items():
     for sym, name in tdata["tickers"].items():
         ALL_TICKERS.append(sym)
         TICKER_META[sym] = {"tier": tid, "name": name, "color": tdata["color"]}
-
-VOLATILE = {"AVAV", "ESLT", "VG", "BWET", "FRO", "INSW", "STNG", "DHT"}
 
 # Approximate baseline prices used when live data is unavailable
 DEMO_PRICES = {
@@ -175,8 +171,10 @@ def fetch_prices():
     CACHE["last_updated"] = now.strftime("%Y-%m-%d %H:%M:%S")
     CACHE["alerts"] = alerts
 
-    # Append to CSV
+    # Append to CSV and persist any alerts to the rolling log
     _save_snapshot(results)
+    if alerts:
+        _save_alerts(alerts)
 
     print(f"  ✅ Got {len(results)}/{len(ALL_TICKERS)} tickers, {len(alerts)} alerts")
 
@@ -198,11 +196,15 @@ def fetch_history_data(days=30):
                 ]
             except Exception:
                 pass
-        if not history:
+        # A failed download yields a dict of empty lists, not an empty dict —
+        # fall back to demo data only when there are no actual price points.
+        has_points = any(pts for pts in history.values())
+        if not has_points:
             print("  ⚠️  No live history — using demo history")
             history = _demo_history()
         CACHE["history"] = history
-        print(f"  ✅ History loaded for {len(history)} tickers")
+        loaded = sum(1 for pts in history.values() if pts)
+        print(f"  ✅ History loaded for {loaded} tickers")
     except Exception as e:
         print(f"  ❌ History fetch error: {e}")
         print("  ⚠️  Falling back to demo history")
@@ -224,6 +226,35 @@ def _save_snapshot(results):
                 "price": d["price"], "change_pct": d["change_pct"],
                 "volume": d["volume"], "high": d["high"], "low": d["low"],
             })
+
+
+def _save_alerts(alerts):
+    """Persist alerts to a rolling JSON log, newest first (keeps last 100)."""
+    existing = []
+    if ALERTS_LOG.exists():
+        try:
+            existing = json.loads(ALERTS_LOG.read_text())
+        except Exception:
+            existing = []
+
+    seen = set()
+    merged = []
+    for a in list(alerts) + existing:
+        key = (a.get("ticker"), a.get("time"))
+        if key in seen:
+            continue
+        seen.add(key)
+        merged.append(a)
+
+    # Newest first. The "time" field is "%Y-%m-%d %H:%M", which sorts
+    # chronologically as a plain string.
+    merged.sort(key=lambda a: a.get("time", ""), reverse=True)
+    merged = merged[:100]
+    try:
+        ALERTS_LOG.write_text(json.dumps(merged, indent=2))
+    except Exception as e:
+        print(f"  ⚠️  Could not write alerts log: {e}")
+    return merged
 
 
 def _demo_prices():
@@ -252,16 +283,22 @@ def _demo_prices():
 
 
 def _demo_history():
-    """Generate synthetic 30-day price history when live data is unavailable."""
+    """Generate synthetic 30-day price history when live data is unavailable.
+
+    Seeded per-ticker so the random walk is stable across refreshes — otherwise
+    the demo sparklines would change shape every time history is re-fetched.
+    """
     import random
+    import zlib
     base_date = datetime.now()
     history = {}
     for sym in ALL_TICKERS:
+        rng = random.Random(zlib.crc32(sym.encode()))
         base = DEMO_PRICES.get(sym, 50.0)
         p = base * 0.92
         pts = []
         for i in range(30):
-            p = round(p * (1 + random.gauss(0, 0.012)), 2)
+            p = round(p * (1 + rng.gauss(0, 0.012)), 2)
             d = (base_date - timedelta(days=29 - i)).strftime("%Y-%m-%d")
             pts.append({"date": d, "close": p})
         history[sym] = pts
@@ -292,6 +329,27 @@ def api_history():
     return jsonify(CACHE.get("history", {}))
 
 
+@app.route("/api/alerts")
+def api_alerts():
+    """Return the rolling alert log (newest first)."""
+    if ALERTS_LOG.exists():
+        try:
+            return jsonify(json.loads(ALERTS_LOG.read_text()))
+        except Exception:
+            return jsonify([])
+    return jsonify([])
+
+
+@app.route("/health")
+def health():
+    """Lightweight health check for deployment platforms."""
+    return jsonify({
+        "status": "ok",
+        "tickers_loaded": len(CACHE["data"]),
+        "last_updated": CACHE["last_updated"],
+    })
+
+
 @app.route("/api/refresh", methods=["POST"])
 def api_refresh():
     fetch_prices()
@@ -310,8 +368,11 @@ def download_csv():
 def start_scheduler():
     """Auto-fetch every 5 minutes during market hours."""
     scheduler = BackgroundScheduler()
-    scheduler.add_job(fetch_prices, "interval", minutes=5, id="price_fetch")
-    scheduler.add_job(lambda: fetch_history_data(30), "interval", hours=6, id="history_fetch")
+    scheduler.add_job(fetch_prices, "interval", minutes=5, id="price_fetch",
+                      max_instances=1, coalesce=True, replace_existing=True)
+    scheduler.add_job(lambda: fetch_history_data(30), "interval", hours=6,
+                      id="history_fetch", max_instances=1, coalesce=True,
+                      replace_existing=True)
     scheduler.start()
     print("⏰ Scheduler started: prices every 5 min, history every 6 hrs")
 

@@ -4,6 +4,7 @@ services:
     runtime: python
     buildCommand: pip install -r requirements.txt
     startCommand: python utopia.py
+    healthCheckPath: /health
     envVars:
       - key: PORT
         value: 10000

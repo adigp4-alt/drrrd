@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block title %}News Feed — Iran Investment Tracker{% endblock %}
+
+{% block style %}
+.news-card { transition: transform 0.15s; }
+.news-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.12); }
+.sentiment-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
+.sentiment-bullish { background: #27ae60; }
+.sentiment-bearish { background: #e74c3c; }
+.sentiment-neutral { background: #6c757d; }
+{% endblock %}
+
+{% block content %}
+<h2 class="mb-3">News Feed</h2>
+
+<div class="row mb-3">
+    <div class="col-md-6">
+        <select id="tickerFilter" class="form-select" multiple size="4"></select>
+        <small class="text-muted">Hold Ctrl/Cmd to select multiple. Leave empty for top tickers.</small>
+    </div>
+    <div class="col-md-3">
+        <select id="sentimentFilter" class="form-select">
+            <option value="all">All Sentiment</option>
+            <option value="bullish">Bullish Only</option>
+            <option value="bearish">Bearish Only</option>
+            <option value="neutral">Neutral Only</option>
+        </select>
+    </div>
+    <div class="col-md-3">
+        <button id="fetchBtn" class="btn btn-primary w-100">Fetch News</button>
+    </div>
+</div>
+
+<div id="loadingSpinner" class="text-center d-none mb-3">
+    <div class="spinner-border text-primary" role="status"></div>
+    <p class="text-muted mt-2">Fetching latest headlines...</p>
+</div>
+
+<div class="row mb-3">
+    <div class="col-md-4"><div class="card stat-card"><div class="label">Total Headlines</div><div class="value" id="statTotal">—</div></div></div>
+    <div class="col-md-4"><div class="card stat-card"><div class="label">Bullish</div><div class="value text-profit" id="statBullish">—</div></div></div>
+    <div class="col-md-4"><div class="card stat-card"><div class="label">Bearish</div><div class="value text-loss" id="statBearish">—</div></div></div>
+</div>
+
+<div id="newsList"></div>
+<div id="emptyState" class="text-center text-muted py-5" style="display:none">
+    <p>No news found. Try different tickers or check back later.</p>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let allNews = [];
+
+async function loadTickers() {
+    const res = await fetch('/api/prices');
+    const json = await res.json();
+    const select = document.getElementById('tickerFilter');
+    json.ticker_order.forEach(sym => {
+        const d = json.tickers[sym];
+        if (!d) return;
+        const opt = document.createElement('option');
+        opt.value = sym;
+        opt.textContent = `${sym} — ${d.name}`;
+        select.appendChild(opt);
+    });
+}
+
+async function fetchNews() {
+    const select = document.getElementById('tickerFilter');
+    const selected = Array.from(select.selectedOptions).map(o => o.value).filter(Boolean);
+    const tickersParam = selected.length ? selected.join(',') : '';
+    const spinner = document.getElementById('loadingSpinner');
+    spinner.classList.remove('d-none');
+    try {
+        const res = await fetch(`/api/news?tickers=${tickersParam}`);
+        const json = await res.json();
+        allNews = json.news || [];
+        renderNews();
+    } finally {
+        spinner.classList.add('d-none');
+    }
+}
+
+function renderNews() {
+    const filter = document.getElementById('sentimentFilter').value;
+    let filtered = allNews;
+    if (filter !== 'all') filtered = allNews.filter(n => n.sentiment === filter);
+
+    document.getElementById('statTotal').textContent = allNews.length;
+    document.getElementById('statBullish').textContent = allNews.filter(n => n.sentiment === 'bullish').length;
+    document.getElementById('statBearish').textContent = allNews.filter(n => n.sentiment === 'bearish').length;
+
+    const container = document.getElementById('newsList');
+    const emptyState = document.getElementById('emptyState');
+    if (!filtered.length) {
+        container.innerHTML = '';
+        emptyState.style.display = '';
+        return;
+    }
+    emptyState.style.display = 'none';
+
+    container.innerHTML = filtered.map(item => {
+        const time = item.published ? new Date(item.published * 1000).toLocaleString() : '';
+        return `<div class="card news-card mb-2">
+            <div class="card-body py-2 px-3">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <span class="sentiment-dot sentiment-${item.sentiment}"></span>
+                        <strong class="me-2">${item.ticker || ''}</strong>
+                        <a href="${item.link}" target="_blank" class="text-decoration-none">${item.title}</a>
+                    </div>
+                    <div class="text-end" style="min-width:120px">
+                        <span class="badge badge-${item.sentiment}">${item.sentiment}</span>
+                        <div class="small text-muted">${item.publisher || ''}</div>
+                    </div>
+                </div>
+                ${time ? `<div class="small text-muted mt-1">${time}</div>` : ''}
+            </div>
+        </div>`;
+    }).join('');
+}
+
+document.getElementById('fetchBtn').addEventListener('click', fetchNews);
+document.getElementById('sentimentFilter').addEventListener('change', renderNews);
+
+loadTickers();
+fetchNews();
+</script>
+{% endblock %}

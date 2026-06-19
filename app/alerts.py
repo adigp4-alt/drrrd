@@ -1,8 +1,11 @@
-"""Alert engine and Telegram integration."""
+"""Alert engine with Telegram and email integration."""
 
 import logging
 import os
+import smtplib
 from datetime import datetime
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 
 import requests
 
@@ -57,6 +60,7 @@ def check_alerts(current_data):
                 )
             triggered.append({"ticker": ticker, "message": message, "time": now})
             send_telegram(message)
+            send_email_alert(message)
 
     return triggered
 
@@ -74,3 +78,52 @@ def send_telegram(message):
     except Exception:
         logger.exception("Failed to send Telegram message")
         return False
+
+
+def send_email_alert(message):
+    """Send alert via email (SMTP) if configured.
+
+    Required env vars: SMTP_HOST, SMTP_USER, SMTP_PASS, ALERT_EMAIL_TO
+    Optional: SMTP_PORT (default 587), SMTP_FROM (defaults to SMTP_USER)
+    """
+    host = os.environ.get("SMTP_HOST")
+    port = int(os.environ.get("SMTP_PORT", "587"))
+    user = os.environ.get("SMTP_USER")
+    password = os.environ.get("SMTP_PASS")
+    to_addr = os.environ.get("ALERT_EMAIL_TO")
+    from_addr = os.environ.get("SMTP_FROM", user)
+
+    if not all([host, user, password, to_addr]):
+        return False
+
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = f"Iran Tracker Alert: {message[:60]}"
+        msg["From"] = from_addr
+        msg["To"] = to_addr
+
+        text_body = f"Stock Alert\n\n{message}\n\nSent by Iran Investment Tracker"
+        html_body = (
+            '<html><body>'
+            '<h2 style="color:#1a1a2e">Stock Alert</h2>'
+            f'<p style="font-size:16px;padding:12px;background:#f8f9fa;'
+            f'border-left:4px solid #2E86C1;margin:16px 0">{message}</p>'
+            '<p style="color:#6c757d;font-size:12px">Sent by Iran Investment Tracker</p>'
+            '</body></html>'
+        )
+        msg.attach(MIMEText(text_body, "plain"))
+        msg.attach(MIMEText(html_body, "html"))
+
+        with smtplib.SMTP(host, port, timeout=15) as server:
+            server.starttls()
+            server.login(user, password)
+            server.sendmail(from_addr, [a.strip() for a in to_addr.split(",")], msg.as_string())
+        return True
+    except Exception:
+        logger.exception("Failed to send email alert")
+        return False
+
+
+def test_email():
+    """Send a test email to verify SMTP configuration."""
+    return send_email_alert("Test alert from Iran Investment Tracker — email is working!")

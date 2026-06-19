@@ -2,7 +2,7 @@
 
 from flask import Blueprint, jsonify, render_template, request
 
-from app.alerts import send_telegram
+from app.alerts import send_telegram, test_email
 from app.models import query_db, execute_db, get_db
 
 bp = Blueprint("alerts_api", __name__)
@@ -74,3 +74,13 @@ def test_telegram():
     if ok:
         return jsonify({"status": "sent"})
     return jsonify({"error": "Failed. Check TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID env vars"}), 400
+
+
+@bp.route("/api/alerts/test-email", methods=["POST"])
+def test_email_route():
+    ok = test_email()
+    if ok:
+        return jsonify({"status": "sent"})
+    return jsonify({
+        "error": "Failed. Check SMTP_HOST, SMTP_USER, SMTP_PASS, ALERT_EMAIL_TO env vars"
+    }), 400

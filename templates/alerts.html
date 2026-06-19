@@ -56,12 +56,28 @@
             </div>
         </div>
 
-        <div class="card">
+        <div class="card mb-3">
             <div class="card-header">Telegram Setup</div>
             <div class="card-body">
                 <p class="small text-muted">Set <code>TELEGRAM_BOT_TOKEN</code> and <code>TELEGRAM_CHAT_ID</code> as environment variables to enable Telegram alerts.</p>
                 <button id="testTelegram" class="btn btn-outline-secondary btn-sm w-100">Test Telegram</button>
                 <div id="telegramStatus" class="small mt-2"></div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">Email Alerts Setup</div>
+            <div class="card-body">
+                <p class="small text-muted mb-1">Set these environment variables to enable email alerts:</p>
+                <ul class="small text-muted mb-2">
+                    <li><code>SMTP_HOST</code> — e.g. smtp.gmail.com</li>
+                    <li><code>SMTP_PORT</code> — e.g. 587 (optional)</li>
+                    <li><code>SMTP_USER</code> — your email address</li>
+                    <li><code>SMTP_PASS</code> — app password</li>
+                    <li><code>ALERT_EMAIL_TO</code> — recipient(s), comma-separated</li>
+                </ul>
+                <button id="testEmail" class="btn btn-outline-primary btn-sm w-100">Test Email</button>
+                <div id="emailStatus" class="small mt-2"></div>
             </div>
         </div>
     </div>
@@ -128,6 +144,15 @@ document.getElementById('testTelegram').addEventListener('click', async () => {
     const res = await fetch('/api/alerts/test-telegram', { method: 'POST' });
     const json = await res.json();
     status.textContent = json.status === 'sent' ? 'Test sent!' : 'Failed: ' + (json.error || 'Unknown error');
+    status.className = 'small mt-2 ' + (json.status === 'sent' ? 'text-success' : 'text-danger');
+});
+
+document.getElementById('testEmail').addEventListener('click', async () => {
+    const status = document.getElementById('emailStatus');
+    status.textContent = 'Sending...';
+    const res = await fetch('/api/alerts/test-email', { method: 'POST' });
+    const json = await res.json();
+    status.textContent = json.status === 'sent' ? 'Test email sent!' : 'Failed: ' + (json.error || 'Unknown error');
     status.className = 'small mt-2 ' + (json.status === 'sent' ? 'text-success' : 'text-danger');
 });
 

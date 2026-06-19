@@ -1,4 +1,4 @@
-"""Report generation for Excel export and performance summaries."""
+"""Report generation for Excel export, PDF export, and performance summaries."""
 
 import io
 from datetime import datetime
@@ -6,6 +6,11 @@ from datetime import datetime
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.chart import BarChart, Reference
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter, landscape
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 
 from app.config import TIERS
 
@@ -154,3 +159,92 @@ def generate_performance_summary(current_prices, history_data):
         "tier_performance": tier_perf,
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     }
+
+
+def _styled_table(data, header_color, col_widths=None):
+    """Build a reportlab Table with consistent styling."""
+    table = Table(data, repeatRows=1, colWidths=col_widths)
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor(header_color)),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 8),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8f9fa')]),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+    ]))
+    return table
+
+
+def generate_pdf_report(holdings, current_prices):
+    """Generate a PDF report with market overview, gainers/losers, and holdings."""
+    output = io.BytesIO()
+    doc = SimpleDocTemplate(output, pagesize=landscape(letter),
+                            topMargin=0.5 * inch, bottomMargin=0.5 * inch)
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle('ReportTitle', parent=styles['Title'],
+                                 fontSize=18, spaceAfter=12)
+    elements = [
+        Paragraph("Iran Investment Tracker — Report", title_style),
+        Paragraph(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", styles['Normal']),
+        Spacer(1, 20),
+    ]
+
+    # Market Overview (sorted by change desc)
+    elements.append(Paragraph("Market Overview", styles['Heading2']))
+    elements.append(Spacer(1, 8))
+    market_data = [["Ticker", "Name", "Tier", "Price", "Change %", "Volume"]]
+    for ticker in sorted(current_prices,
+                         key=lambda t: current_prices[t].get("change_pct", 0), reverse=True):
+        d = current_prices[ticker]
+        market_data.append([
+            ticker, d.get("name", ""), d.get("tier", ""),
+            f"${d.get('price', 0):.2f}", f"{d.get('change_pct', 0):+.2f}%",
+            f"{d.get('volume', 0):,}",
+        ])
+    if len(market_data) > 1:
+        elements.append(_styled_table(market_data, '#1a1a2e'))
+    else:
+        elements.append(Paragraph("No market data available.", styles['Normal']))
+    elements.append(Spacer(1, 20))
+
+    # Gainers / Losers
+    summary = generate_performance_summary(current_prices, {})
+    if "top_gainers" in summary:
+        elements.append(Paragraph("Top Gainers", styles['Heading2']))
+        g_data = [["Ticker", "Price", "Change %"]]
+        for g in summary["top_gainers"]:
+            g_data.append([g["ticker"], f"${g['price']:.2f}", f"+{g['change_pct']:.2f}%"])
+        widths = [1.5 * inch, 1.5 * inch, 1.5 * inch]
+        elements.append(_styled_table(g_data, '#27ae60', widths))
+        elements.append(Spacer(1, 12))
+
+        elements.append(Paragraph("Top Losers", styles['Heading2']))
+        l_data = [["Ticker", "Price", "Change %"]]
+        for item in summary["top_losers"]:
+            l_data.append([item["ticker"], f"${item['price']:.2f}", f"{item['change_pct']:.2f}%"])
+        elements.append(_styled_table(l_data, '#e74c3c', widths))
+        elements.append(Spacer(1, 20))
+
+    # Holdings
+    if holdings:
+        elements.append(Paragraph("Portfolio Holdings", styles['Heading2']))
+        elements.append(Spacer(1, 8))
+        h_data = [["Ticker", "Shares", "Buy Price", "Current", "P&L ($)", "P&L (%)"]]
+        for h in holdings:
+            ticker = h["ticker"]
+            current = current_prices.get(ticker, {}).get("price", h["buy_price"])
+            cost = h["shares"] * h["buy_price"]
+            pnl = h["shares"] * current - cost
+            pnl_pct = (pnl / cost * 100) if cost else 0
+            h_data.append([
+                ticker, f"{h['shares']:.2f}", f"${h['buy_price']:.2f}",
+                f"${current:.2f}", f"${pnl:+.2f}", f"{pnl_pct:+.2f}%",
+            ])
+        elements.append(_styled_table(h_data, '#2E86C1'))
+
+    doc.build(elements)
+    output.seek(0)
+    return output

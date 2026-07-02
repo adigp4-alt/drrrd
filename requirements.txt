@@ -11,3 +11,6 @@ vaderSentiment==3.3.2
 scipy>=1.11.0
 statsmodels>=0.14.0
 prophet>=1.1.5
+flask-socketio>=5.3.6
+eventlet>=0.35.1
+discord.py>=2.3.2

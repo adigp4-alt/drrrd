@@ -71,7 +71,18 @@ import threading
 
 @bp.route("/api/refresh", methods=["POST"])
 def api_refresh():
-    threading.Thread(target=fetch_prices, daemon=True).start()
+    def _refresh():
+        fetch_prices()
+        try:
+            from app.extensions import socketio
+            socketio.emit("refresh_complete", {
+                "tickers": CACHE["data"],
+                "last_updated": CACHE["last_updated"],
+                "alerts": CACHE["alerts"],
+            })
+        except Exception:
+            pass
+    threading.Thread(target=_refresh, daemon=True).start()
     return jsonify({"status": "ok", "last_updated": CACHE["last_updated"]})
 
 

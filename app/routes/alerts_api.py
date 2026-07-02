@@ -2,7 +2,7 @@
 
 from flask import Blueprint, jsonify, render_template, request
 
-from app.alerts import send_telegram
+from app.alerts import send_discord
 from app.models import query_db, execute_db, get_db
 
 bp = Blueprint("alerts_api", __name__)
@@ -65,9 +65,9 @@ def toggle_alert(rule_id):
     return jsonify({"status": "toggled"})
 
 
-@bp.route("/api/alerts/test-telegram", methods=["POST"])
-def test_telegram():
-    ok = send_telegram("Test alert from Iran Investment Tracker")
+@bp.route("/api/alerts/test-discord", methods=["POST"])
+def test_discord():
+    ok = send_discord("Test alert from Iran Investment Tracker")
     if ok:
         return jsonify({"status": "sent"})
-    return jsonify({"error": "Failed. Check TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID env vars"}), 400
+    return jsonify({"error": "Failed. Check DISCORD_BOT_TOKEN and DISCORD_CHANNEL_ID env vars"}), 400

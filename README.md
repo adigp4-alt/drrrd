@@ -86,6 +86,7 @@ drrrd/
 │   ├── routes/             ← One blueprint per feature
 │   └── tasks/              ← Daily AI data collection
 ├── templates/              ← Dashboard, portfolio, analysis, news, risk, …
+├── tests/                  ← Pytest suite (run: pytest -q)
 ├── requirements.txt
 ├── render.yaml             ← Render.com blueprint
 ├── Procfile                ← Railway/Heroku
@@ -134,6 +135,18 @@ Environment variables (all optional — see `.env.example`):
 
 **Change refresh interval:** in `app/scheduler.py`, change `minutes=5`.
 **Add/remove tickers:** edit the `TIERS` dictionary in `app/config.py`.
+
+## 🧪 Development
+
+```bash
+pip install -r requirements.txt pytest flake8
+pytest -q            # run the test suite (no network needed)
+flake8 . --select=E9,F63,F7,F82   # what CI enforces
+```
+
+Set `SKIP_STARTUP_FETCH=1` to import/run the app without background
+data-fetching threads (used by the tests). CI (GitHub Actions) runs the
+lint and the test suite on every push.
 
 ---
 

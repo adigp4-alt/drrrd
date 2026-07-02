@@ -1,20 +1,23 @@
 """Dashboard routes — main page and price API."""
 
+import threading
+
 from flask import Blueprint, jsonify, render_template, send_file
 
 from app.config import ALL_TICKERS, TIERS, SNAPSHOT_CSV
 from app.data_fetcher import CACHE, fetch_prices
+from app.models import query_db
+from app.nlp_engine import generate_daily_briefing
 
 bp = Blueprint("dashboard", __name__)
+
+_refresh_lock = threading.Lock()
 
 
 @bp.route("/")
 def index():
     return render_template("dashboard.html")
 
-
-from app.models import query_db
-from app.nlp_engine import generate_daily_briefing
 
 @bp.route("/api/prices")
 def api_prices():
@@ -24,7 +27,7 @@ def api_prices():
         current_prices = CACHE.get("data", {})
         enriched_holdings = []
         total_val = 0
-        
+
         for h in holdings:
             ticker = h["ticker"]
             price_data = current_prices.get(ticker, {})
@@ -39,15 +42,15 @@ def api_prices():
                 "market_value": market_value,
                 "pnl": pnl
             })
-            
+
         for h in enriched_holdings:
             h["allocation"] = (h["market_value"] / total_val * 100) if total_val else 0
-            
+
         # Get screener ML cache
         screener_cache = CACHE.get('screener_data', [])
-        
+
         briefing = generate_daily_briefing(enriched_holdings, screener_cache)
-        
+
     except Exception as e:
         briefing = f"Copilot is currently unavailable: {e}"
 
@@ -67,13 +70,16 @@ def api_history():
     return jsonify(CACHE.get("history", {}))
 
 
-import threading
-
 @bp.route("/api/refresh", methods=["POST"])
 def api_refresh():
+    # One refresh at a time — this endpoint is unauthenticated and each
+    # refresh hits Yahoo Finance for every ticker.
+    if not _refresh_lock.acquire(blocking=False):
+        return jsonify({"status": "ignored", "message": "Refresh already in progress"}), 409
+
     def _refresh():
-        fetch_prices()
         try:
+            fetch_prices()
             from app.extensions import socketio
             socketio.emit("refresh_complete", {
                 "tickers": CACHE["data"],
@@ -82,6 +88,9 @@ def api_refresh():
             })
         except Exception:
             pass
+        finally:
+            _refresh_lock.release()
+
     threading.Thread(target=_refresh, daemon=True).start()
     return jsonify({"status": "ok", "last_updated": CACHE["last_updated"]})
 

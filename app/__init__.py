@@ -55,13 +55,23 @@ def create_app():
     def health_check():
         return jsonify({"status": "ok", "last_updated": CACHE.get("last_updated")})
 
-    # Startup: fetch data and start scheduler
-    def _startup():
-        fetch_prices()
-        check_alerts(CACHE.get("data", {}))
-        fetch_history_data(30)
-        start_scheduler()
+    @app.after_request
+    def set_security_headers(resp):
+        resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+        resp.headers.setdefault("X-Frame-Options", "DENY")
+        resp.headers.setdefault("Referrer-Policy", "same-origin")
+        return resp
 
-    threading.Thread(target=_startup, daemon=True).start()
+    # Startup: fetch data and start scheduler.
+    # SKIP_STARTUP_FETCH lets tests and tooling import the app without
+    # spawning network-fetching background threads.
+    if not os.environ.get("SKIP_STARTUP_FETCH"):
+        def _startup():
+            fetch_prices()
+            check_alerts(CACHE.get("data", {}))
+            fetch_history_data(30)
+            start_scheduler()
+
+        threading.Thread(target=_startup, daemon=True).start()
 
     return app

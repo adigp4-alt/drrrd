@@ -7,3 +7,4 @@ debug_analysis.log
 *.pyc
 .venv/
 venv/
+.pytest_cache/

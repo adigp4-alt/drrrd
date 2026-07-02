@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Compare — Iran Investment Tracker{% endblock %}
+
+{% block content %}
+<h2 class="mb-3">Compare Tickers</h2>
+<p class="text-muted">Overlay up to 8 tickers, each rebased to 100 at the start for fair comparison (30-day window).</p>
+
+<div class="row mb-3">
+    <div class="col-md-8">
+        <select id="tickerMulti" class="form-select" multiple size="5"></select>
+        <small class="text-muted">Hold Ctrl/Cmd to select multiple (max 8).</small>
+    </div>
+    <div class="col-md-4">
+        <button id="compareBtn" class="btn btn-primary w-100">Compare</button>
+    </div>
+</div>
+
+<div id="emptyState" class="text-center text-muted py-5"><p>Select tickers and click Compare.</p></div>
+
+<div id="chartWrap" class="card" style="display:none">
+    <div class="card-header">Normalized Performance (start = 100)</div>
+    <div class="card-body"><canvas id="cmpChart" height="90"></canvas></div>
+</div>
+
+<div id="legend" class="row mt-3"></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let cmpChart = null;
+
+async function loadTickers() {
+    const res = await fetch('/api/prices');
+    const json = await res.json();
+    const sel = document.getElementById('tickerMulti');
+    json.ticker_order.forEach(sym => {
+        const d = json.tickers[sym];
+        if (!d) return;
+        const o = document.createElement('option');
+        o.value = sym; o.textContent = `${sym} — ${d.name}`;
+        sel.appendChild(o);
+    });
+}
+
+async function compare() {
+    const sel = document.getElementById('tickerMulti');
+    const chosen = Array.from(sel.selectedOptions).map(o => o.value);
+    if (!chosen.length) { alert('Select at least one ticker'); return; }
+
+    const res = await fetch('/api/compare?tickers=' + chosen.join(','));
+    const json = await res.json();
+    if (json.error) { alert(json.error); return; }
+
+    document.getElementById('emptyState').style.display = 'none';
+    document.getElementById('chartWrap').style.display = '';
+
+    const datasets = json.series.map(s => ({
+        label: s.ticker, data: s.normalized,
+        borderColor: s.color, backgroundColor: s.color,
+        fill: false, tension: 0.2, pointRadius: 0, borderWidth: 2,
+    }));
+
+    const ctx = document.getElementById('cmpChart').getContext('2d');
+    if (cmpChart) cmpChart.destroy();
+    cmpChart = new Chart(ctx, {
+        type: 'line',
+        data: { labels: json.dates, datasets },
+        options: { responsive: true, interaction: { intersect: false, mode: 'index' },
+                   plugins: { legend: { position: 'top' } },
+                   scales: { y: { title: { display: true, text: 'Indexed (100 = start)' } } } }
+    });
+
+    document.getElementById('legend').innerHTML = json.series.map(s => {
+        const c = s.change_pct >= 0 ? 'text-profit' : 'text-loss';
+        return `<div class="col-md-3 mb-2"><div class="card stat-card py-2">
+            <div class="label"><span style="color:${s.color}">●</span> ${s.ticker}</div>
+            <div class="value ${c}" style="font-size:1.3rem">${s.change_pct >= 0 ? '+' : ''}${s.change_pct}%</div>
+        </div></div>`;
+    }).join('');
+}
+
+document.getElementById('compareBtn').addEventListener('click', compare);
+loadTickers();
+</script>
+{% endblock %}

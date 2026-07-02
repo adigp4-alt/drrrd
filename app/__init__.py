@@ -3,7 +3,7 @@
 import os
 import threading
 
-from flask import Flask
+from flask import Flask, jsonify
 
 from app.extensions import socketio
 from app.models import init_db
@@ -31,7 +31,7 @@ def create_app():
     from app.routes import (
         dashboard, portfolio, analysis, alerts_api,
         watchlist, export, screener, backtest, stat_arb,
-        remote_api,
+        remote_api, news, history, risk, tools, autonomous,
     )
     app.register_blueprint(dashboard.bp)
     app.register_blueprint(portfolio.bp)
@@ -43,6 +43,15 @@ def create_app():
     app.register_blueprint(backtest.bp)
     app.register_blueprint(stat_arb.bp)
     app.register_blueprint(remote_api.bp)
+    app.register_blueprint(news.bp)
+    app.register_blueprint(history.bp)
+    app.register_blueprint(risk.bp)
+    app.register_blueprint(tools.bp)
+    app.register_blueprint(autonomous.bp)
+
+    @app.route("/health")
+    def health_check():
+        return jsonify({"status": "ok", "last_updated": CACHE.get("last_updated")})
 
     # Startup: fetch data and start scheduler
     def _startup():

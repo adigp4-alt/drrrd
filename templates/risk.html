@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Risk Metrics — Iran Investment Tracker{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="mb-0">Risk Metrics</h2>
+    <span class="badge bg-secondary" id="windowBadge">—</span>
+</div>
+<p class="text-muted">Annualized from recent history. Higher Sharpe/Sortino is better; lower volatility, drawdown, and VaR mean less risk.</p>
+
+<div id="loadingSpinner" class="text-center mb-3">
+    <div class="spinner-border text-primary" role="status"></div>
+</div>
+
+<div class="card">
+    <div class="card-body p-0">
+        <table class="table table-hover mb-0" id="riskTable">
+            <thead class="table-dark">
+                <tr>
+                    <th>Ticker</th><th>Tier</th>
+                    <th>Ann. Return</th><th>Volatility</th>
+                    <th>Sharpe</th><th>Sortino</th>
+                    <th>Max DD</th><th>VaR 95%</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function cls(v) { return v >= 0 ? 'text-profit' : 'text-loss'; }
+
+async function load() {
+    const res = await fetch('/api/risk');
+    const json = await res.json();
+    document.getElementById('loadingSpinner').style.display = 'none';
+    if (json.error) {
+        document.querySelector('#riskTable tbody').innerHTML =
+            `<tr><td colspan="8" class="text-center text-muted py-4">${json.error}</td></tr>`;
+        return;
+    }
+    document.getElementById('windowBadge').textContent = json.window + ' window';
+
+    // Sort by Sharpe descending (best risk-adjusted first)
+    const rows = json.metrics.sort((a, b) => b.sharpe_ratio - a.sharpe_ratio);
+    document.querySelector('#riskTable tbody').innerHTML = rows.map(m => `
+        <tr>
+            <td><strong>${m.ticker}</strong> <span class="small text-muted">${m.name}</span></td>
+            <td><span class="badge bg-secondary">${m.tier}</span></td>
+            <td class="${cls(m.annualized_return)}">${m.annualized_return >= 0 ? '+' : ''}${m.annualized_return}%</td>
+            <td>${m.annualized_volatility}%</td>
+            <td class="${cls(m.sharpe_ratio)}"><strong>${m.sharpe_ratio}</strong></td>
+            <td class="${cls(m.sortino_ratio)}">${m.sortino_ratio}</td>
+            <td class="text-loss">-${m.max_drawdown}%</td>
+            <td>${m.value_at_risk_95}%</td>
+        </tr>
+    `).join('');
+}
+load();
+</script>
+{% endblock %}

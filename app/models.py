@@ -71,7 +71,10 @@ def init_db():
 @contextmanager
 def get_db():
     """Context manager for database connections."""
-    conn = sqlite3.connect(str(DB_PATH))
+    # WAL + busy timeout: scheduler and request threads write concurrently,
+    # and the default journal mode raises "database is locked" under load.
+    conn = sqlite3.connect(str(DB_PATH), timeout=10)
+    conn.execute("PRAGMA journal_mode=WAL")
     conn.row_factory = sqlite3.Row
     try:
         yield conn

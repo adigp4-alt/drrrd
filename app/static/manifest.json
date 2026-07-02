@@ -1,0 +1,17 @@
+{
+  "name": "Iran Investment Tracker",
+  "short_name": "IranTracker",
+  "description": "Live tracking, analysis, and strategy for a geopolitical investment basket",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#16213e",
+  "theme_color": "#16213e",
+  "icons": [
+    {
+      "src": "/static/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

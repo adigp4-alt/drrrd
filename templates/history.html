@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+{% block title %}Historical Charts — Iran Investment Tracker{% endblock %}
+
+{% block content %}
+<h2 class="mb-3">Historical Charts</h2>
+
+<div class="row mb-3">
+    <div class="col-md-5">
+        <select id="tickerSelect" class="form-select">
+            <option value="">Select a ticker...</option>
+        </select>
+    </div>
+    <div class="col-md-5">
+        <div class="btn-group w-100" role="group">
+            <button class="btn btn-outline-primary active" data-period="7d">7 Days</button>
+            <button class="btn btn-outline-primary" data-period="1mo">30 Days</button>
+            <button class="btn btn-outline-primary" data-period="3mo">90 Days</button>
+        </div>
+    </div>
+    <div id="loadingSpinner" class="col-md-2 d-none">
+        <div class="spinner-border spinner-border-sm text-primary mt-2" role="status"></div>
+        <span class="text-muted ms-1">Loading...</span>
+    </div>
+</div>
+
+<div id="emptyState" class="text-center text-muted py-5">
+    <p>Select a ticker to view its price history.</p>
+</div>
+
+<div id="chartArea" style="display:none">
+    <div class="card mb-4">
+        <div class="card-header" id="chartTitle">Price History</div>
+        <div class="card-body"><canvas id="priceChart" height="100"></canvas></div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header">Volume</div>
+        <div class="card-body"><canvas id="volumeChart" height="60"></canvas></div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-2"><div class="card stat-card"><div class="label">High</div><div class="value text-profit" id="statHigh">—</div></div></div>
+        <div class="col-md-2"><div class="card stat-card"><div class="label">Low</div><div class="value text-loss" id="statLow">—</div></div></div>
+        <div class="col-md-2"><div class="card stat-card"><div class="label">Avg Close</div><div class="value" id="statAvg">—</div></div></div>
+        <div class="col-md-2"><div class="card stat-card"><div class="label">Period Change</div><div class="value" id="statChange">—</div></div></div>
+        <div class="col-md-2"><div class="card stat-card"><div class="label">Avg Volume</div><div class="value" id="statVolume">—</div></div></div>
+        <div class="col-md-2"><div class="card stat-card"><div class="label">Days</div><div class="value" id="statDays">—</div></div></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let priceChart = null;
+let volumeChart = null;
+let currentPeriod = '7d';
+
+async function loadTickers() {
+    const res = await fetch('/api/prices');
+    const json = await res.json();
+    const select = document.getElementById('tickerSelect');
+    json.ticker_order.forEach(sym => {
+        const d = json.tickers[sym];
+        if (!d) return;
+        const opt = document.createElement('option');
+        opt.value = sym;
+        opt.textContent = `${sym} — ${d.name} (${d.tier})`;
+        select.appendChild(opt);
+    });
+}
+
+async function loadHistory(ticker, period) {
+    if (!ticker) return;
+    const spinner = document.getElementById('loadingSpinner');
+    spinner.classList.remove('d-none');
+    try {
+        const res = await fetch(`/api/history/${ticker}?period=${period}`);
+        const json = await res.json();
+        if (json.error) { alert(json.error); return; }
+
+        const data = json.data;
+        const labels = data.map(d => d.date);
+        const closes = data.map(d => d.close);
+        const highs = data.map(d => d.high);
+        const lows = data.map(d => d.low);
+        const volumes = data.map(d => d.volume);
+
+        document.getElementById('emptyState').style.display = 'none';
+        document.getElementById('chartArea').style.display = '';
+        document.getElementById('chartTitle').textContent = `${ticker} — Price History (${period})`;
+
+        const ctx1 = document.getElementById('priceChart').getContext('2d');
+        if (priceChart) priceChart.destroy();
+        priceChart = new Chart(ctx1, {
+            type: 'line',
+            data: {
+                labels,
+                datasets: [
+                    { label: 'Close', data: closes, borderColor: '#2E86C1', backgroundColor: 'rgba(46,134,193,0.1)', fill: true, tension: 0.3, pointRadius: 2 },
+                    { label: 'High', data: highs, borderColor: '#27ae60', borderDash: [4,4], pointRadius: 0, borderWidth: 1 },
+                    { label: 'Low', data: lows, borderColor: '#e74c3c', borderDash: [4,4], pointRadius: 0, borderWidth: 1 },
+                ]
+            },
+            options: {
+                responsive: true,
+                interaction: { intersect: false, mode: 'index' },
+                plugins: { legend: { position: 'top' } },
+                scales: { y: { title: { display: true, text: 'Price ($)' } } }
+            }
+        });
+
+        const ctx2 = document.getElementById('volumeChart').getContext('2d');
+        if (volumeChart) volumeChart.destroy();
+        volumeChart = new Chart(ctx2, {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [{
+                    label: 'Volume',
+                    data: volumes,
+                    backgroundColor: closes.map((c, i) => i > 0 && c >= closes[i-1] ? 'rgba(39,174,96,0.6)' : 'rgba(231,76,60,0.6)'),
+                    borderRadius: 2,
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { display: false } },
+                scales: { y: { title: { display: true, text: 'Volume' } } }
+            }
+        });
+
+        const high = Math.max(...highs);
+        const low = Math.min(...lows);
+        const avg = closes.reduce((a,b) => a+b, 0) / closes.length;
+        const change = (closes[closes.length-1] - closes[0]) / closes[0] * 100;
+        const avgVol = Math.round(volumes.reduce((a,b) => a+b, 0) / volumes.length);
+
+        document.getElementById('statHigh').textContent = '$' + high.toFixed(2);
+        document.getElementById('statLow').textContent = '$' + low.toFixed(2);
+        document.getElementById('statAvg').textContent = '$' + avg.toFixed(2);
+        const changeEl = document.getElementById('statChange');
+        changeEl.textContent = (change >= 0 ? '+' : '') + change.toFixed(2) + '%';
+        changeEl.className = 'value ' + (change >= 0 ? 'text-profit' : 'text-loss');
+        document.getElementById('statVolume').textContent = avgVol.toLocaleString();
+        document.getElementById('statDays').textContent = data.length;
+    } finally {
+        spinner.classList.add('d-none');
+    }
+}
+
+document.getElementById('tickerSelect').addEventListener('change', function() {
+    loadHistory(this.value, currentPeriod);
+});
+
+document.querySelectorAll('[data-period]').forEach(btn => {
+    btn.addEventListener('click', function() {
+        document.querySelectorAll('[data-period]').forEach(b => b.classList.remove('active'));
+        this.classList.add('active');
+        currentPeriod = this.dataset.period;
+        const ticker = document.getElementById('tickerSelect').value;
+        if (ticker) loadHistory(ticker, currentPeriod);
+    });
+});
+
+loadTickers();
+</script>
+{% endblock %}

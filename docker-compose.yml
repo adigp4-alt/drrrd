@@ -1,0 +1,16 @@
+services:
+  tracker:
+    build: .
+    ports:
+      - "${PORT:-5000}:5000"
+    environment:
+      - PORT=5000
+      - REMOTE_API_KEY=${REMOTE_API_KEY:-}
+      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN:-}
+      - DISCORD_CHANNEL_ID=${DISCORD_CHANNEL_ID:-}
+    volumes:
+      - tracker-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  tracker-data:

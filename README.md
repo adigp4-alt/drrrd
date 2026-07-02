@@ -15,7 +15,7 @@ Once deployed (see below), the app is a normal website URL — open it from any 
 
 It launches full-screen like a native app and caches the shell for offline viewing.
 
-**Remote API access:** set the `REMOTE_API_KEY` environment variable, then call the authenticated `/api/remote/*` endpoints from anywhere with the `X-API-Key` header.
+**Remote API access:** set the `REMOTE_API_KEY` environment variable, then call the authenticated `/remote/*` endpoints (refresh, prices, portfolio, alert, holding) from anywhere with the `X-API-Key` header.
 
 **Discord bot (optional):** set `DISCORD_BOT_TOKEN` and `DISCORD_CHANNEL_ID` to get price alerts and query commands in your Discord server.
 
@@ -117,7 +117,7 @@ drrrd/
 | `/autonomous` | Autonomous strategy scanner |
 | `/health` | Health check (JSON) |
 | `/api/prices` | Current prices for all tickers (JSON) |
-| `/api/remote/*` | Authenticated remote-control API (`X-API-Key`) |
+| `/remote/*` | Authenticated remote-control API (`X-API-Key`) |
 
 ---
 

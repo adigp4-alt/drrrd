@@ -75,7 +75,8 @@ def remote_create_alert():
     data = request.get_json()
     if not data:
         return jsonify({"error": "No JSON body"}), 400
-    if not all(data.get(k) for k in ("ticker", "condition", "threshold")):
+    # Key-presence check so a valid threshold of 0 isn't rejected as falsy
+    if not all(k in data for k in ("ticker", "condition", "threshold")) or not data["ticker"]:
         return jsonify({"error": "ticker, condition, and threshold required"}), 400
     valid_conditions = ("above", "below", "change_pct_above", "volume_spike")
     if data["condition"] not in valid_conditions:
@@ -95,7 +96,8 @@ def remote_create_alert():
 @require_api_key
 def remote_add_holding():
     data = request.get_json()
-    if not data or not data.get("ticker") or not data.get("shares") or not data.get("buy_price"):
+    # Key-presence check so a valid buy_price of 0 (gifted/spin-off shares) isn't rejected
+    if not data or not all(k in data for k in ("ticker", "shares", "buy_price")) or not data["ticker"]:
         return jsonify({"error": "ticker, shares, and buy_price required"}), 400
     try:
         shares = float(data["shares"])

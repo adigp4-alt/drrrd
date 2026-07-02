@@ -28,14 +28,22 @@ def api_autonomous():
     })
 
 
+_scan_lock = threading.Lock()
+
+
 @bp.route("/api/autonomous/scan", methods=["POST"])
 def trigger_scan():
-    """Trigger a manual autonomous scan in the background."""
+    """Trigger a manual autonomous scan in the background (one at a time)."""
+    if not _scan_lock.acquire(blocking=False):
+        return jsonify({"status": "ignored", "message": "Scan already in progress"}), 409
+
     def _run():
         try:
             run_autonomous_scan()
         except Exception:
             logger.exception("Autonomous scan failed")
+        finally:
+            _scan_lock.release()
 
     threading.Thread(target=_run, daemon=True).start()
     return jsonify({"status": "scan_started", "message": "Autonomous scan running in background"})

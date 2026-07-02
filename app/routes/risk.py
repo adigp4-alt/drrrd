@@ -13,19 +13,19 @@ logger = logging.getLogger(__name__)
 bp = Blueprint("risk", __name__)
 
 # Benchmark for beta (SPY = S&P 500 ETF), fetched lazily and cached
-_BENCHMARK = {"closes": None}
+_BENCHMARK = {"data": None}
 
 
-def _get_benchmark_closes():
-    """Fetch SPY closes once for beta calculation; cache in-process."""
-    if _BENCHMARK["closes"] is None:
+def _get_benchmark_data():
+    """Fetch SPY closes keyed by date for beta calculation; cache in-process."""
+    if _BENCHMARK["data"] is None:
         try:
             data = fetch_analysis_data("SPY", "3mo")
             if data:
-                _BENCHMARK["closes"] = [r["close"] for r in data]
+                _BENCHMARK["data"] = {r["date"]: r["close"] for r in data}
         except Exception:
             logger.warning("Could not fetch SPY benchmark for beta")
-    return _BENCHMARK["closes"]
+    return _BENCHMARK["data"]
 
 
 @bp.route("/risk")
@@ -71,12 +71,19 @@ def api_risk_one(ticker):
     if not data:
         return jsonify({"error": "No data available"}), 404
 
-    closes = [r["close"] for r in data]
-    bench = _get_benchmark_closes()
-    # Align benchmark length to the ticker series for beta
+    bench = _get_benchmark_data()
+    # Align ticker and benchmark by date so covariance/beta pairs actual
+    # trading days rather than assuming identical calendars
     bench_aligned = None
-    if bench and len(bench) >= len(closes):
-        bench_aligned = bench[-len(closes):]
+    if bench:
+        pairs = [(r["close"], bench[r["date"]]) for r in data if r["date"] in bench]
+        if len(pairs) >= 2:
+            closes = [p[0] for p in pairs]
+            bench_aligned = [p[1] for p in pairs]
+        else:
+            closes = [r["close"] for r in data]
+    else:
+        closes = [r["close"] for r in data]
 
     metrics = compute_risk_metrics(closes, bench_aligned)
     if metrics is None:

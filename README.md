@@ -67,7 +67,7 @@ Visit `http://localhost:5000`
 
 ```
 drrrd/
-├── main.py                 ← Entry point (eventlet + SocketIO)
+├── main.py                 ← Entry point (Flask + SocketIO)
 ├── app/
 │   ├── __init__.py         ← Flask app factory, blueprint registration
 │   ├── config.py           ← Tickers, tiers, paths

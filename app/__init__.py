@@ -16,13 +16,15 @@ from app.data_fetcher import CACHE
 def create_app():
     app = Flask(__name__, template_folder="../templates")
 
-    # Initialize SocketIO (must happen before blueprints use it)
-    socketio.init_app(app, cors_allowed_origins="*", async_mode="eventlet")
+    # Threading mode: WebSocket via simple-websocket, and the asyncio Discord
+    # bot can safely run in its own thread (asyncio is incompatible with
+    # eventlet monkey-patching, so eventlet must not be used here).
+    socketio.init_app(app, cors_allowed_origins="*", async_mode="threading")
 
     # Initialize database
     init_db()
 
-    # Start Discord bot early (before eventlet scheduler to avoid loop conflicts)
+    # Start Discord bot in its own thread (asyncio event loop)
     if os.environ.get("DISCORD_BOT_TOKEN"):
         from app.discord_bot import start_bot
         start_bot()

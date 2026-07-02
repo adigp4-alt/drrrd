@@ -30,27 +30,38 @@ def api_compare():
     if not tickers:
         return jsonify({"error": "Provide 1-8 tickers via ?tickers=A,B,C"}), 400
 
-    # Use the union of dates from the first available ticker as the axis
-    series_out = []
-    label_dates = None
+    # Build a master timeline of all unique dates so series with different
+    # calendars or gaps stay aligned in the chart instead of shifting by index
+    ticker_pts = {}
+    all_dates = set()
     for ticker in tickers:
         pts = history.get(ticker)
-        if not pts or len(pts) < 2:
-            continue
-        closes = [p["close"] for p in pts]
-        base = closes[0]
+        if pts and len(pts) >= 2:
+            ticker_pts[ticker] = pts
+            all_dates.update(p["date"] for p in pts)
+
+    if not ticker_pts:
+        return jsonify({"error": "No history for selected tickers"}), 404
+
+    label_dates = sorted(all_dates)
+    series_out = []
+    for ticker, pts in ticker_pts.items():
+        date_map = {p["date"]: p["close"] for p in pts}
+        base = next((p["close"] for p in pts if p["close"]), None)
         if not base:
             continue
-        normalized = [round(c / base * 100, 2) for c in closes]
-        if label_dates is None:
-            label_dates = [p["date"] for p in pts]
+        normalized = [
+            round(date_map[d] / base * 100, 2) if date_map.get(d) is not None else None
+            for d in label_dates
+        ]
+        last_close = next((p["close"] for p in reversed(pts) if p["close"]), base)
         meta = TICKER_META.get(ticker, {})
         series_out.append({
             "ticker": ticker,
             "name": meta.get("name", ticker),
             "color": meta.get("color", "#666"),
             "normalized": normalized,
-            "change_pct": round(normalized[-1] - 100, 2),
+            "change_pct": round((last_close - base) / base * 100, 2),
         })
 
     if not series_out:

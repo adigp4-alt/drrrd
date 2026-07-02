@@ -14,5 +14,5 @@ RUN mkdir -p data
 
 EXPOSE 5000
 
-# Single eventlet worker — required for WebSocket (flask-socketio) support
-CMD ["gunicorn", "--worker-class", "eventlet", "-w", "1", "main:app", "--bind", "0.0.0.0:5000", "--timeout", "120"]
+# Single worker (in-memory cache + scheduler); threads serve WebSocket/polling
+CMD ["gunicorn", "main:app", "--bind", "0.0.0.0:5000", "--workers", "1", "--threads", "8", "--timeout", "120"]

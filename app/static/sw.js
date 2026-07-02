@@ -18,8 +18,9 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   const req = event.request;
-  // Never cache API calls — always go to network for live data.
-  if (req.url.includes("/api/")) {
+  // Only handle GET requests (Cache API rejects others) and skip API calls —
+  // always go to network for live data.
+  if (req.method !== "GET" || req.url.includes("/api/")) {
     return;
   }
   // Network-first for pages, fall back to cache when offline.

@@ -12,7 +12,7 @@ from app.data_fetcher import CACHE
 
 
 def create_app():
-    app = Flask(__name__, template_folder="../templates")
+    app = Flask(__name__, template_folder="../templates", static_folder="../static")
 
     # Initialize database
     init_db()

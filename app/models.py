@@ -42,6 +42,39 @@ CREATE TABLE IF NOT EXISTS alert_history (
     message TEXT,
     triggered_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Every published forecast, plus its realized outcome once the target session
+-- closes. The UNIQUE constraint means re-scanning within a session updates the
+-- existing row instead of inflating the sample the scorecard is computed from.
+CREATE TABLE IF NOT EXISTS forecasts (
+    id INTEGER PRIMARY KEY,
+    ticker TEXT NOT NULL,
+    asof_date TEXT NOT NULL,
+    horizon TEXT NOT NULL DEFAULT 'next_session',
+    direction TEXT NOT NULL,
+    p_up REAL NOT NULL,
+    expected_move_pct REAL,
+    sigma_pct REAL,
+    conviction INTEGER,
+    source TEXT,
+    catalyst_shift REAL,
+    vol_multiplier REAL,
+    rationale TEXT,
+    ref_close REAL,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    target_date TEXT,
+    resolved_at TEXT,
+    realized_return_pct REAL,
+    outcome INTEGER,
+    brier REAL,
+    log_loss REAL,
+    UNIQUE(ticker, asof_date, horizon)
+);
+
+CREATE INDEX IF NOT EXISTS idx_forecasts_pending
+    ON forecasts(resolved_at, asof_date);
+CREATE INDEX IF NOT EXISTS idx_forecasts_scorecard
+    ON forecasts(asof_date, ticker);
 """
 
 

@@ -1,0 +1,434 @@
+{% extends "base.html" %}
+{% block title %}ForesightTape — Next-Session Forecasts{% endblock %}
+
+{% block style %}
+/* Ticker tape */
+.ft-tape-wrap { overflow: hidden; white-space: nowrap; background: rgba(0,0,0,0.45);
+    border: 1px solid var(--border-color); border-radius: 10px; margin-bottom: 1.5rem; }
+.ft-tape { display: inline-block; padding: 0.45rem 0; animation: ft-scroll 40s linear infinite; }
+.ft-tape:hover { animation-play-state: paused; }
+@keyframes ft-scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+@media (prefers-reduced-motion: reduce) { .ft-tape { animation: none; } }
+.ft-tape .chip { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0 1.1rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.8rem; }
+
+/* Heatmap tiles */
+.ft-tile { border-radius: 12px; padding: 0.9rem 1rem; border: 1px solid rgba(255,255,255,0.06);
+    height: 100%; cursor: default; transition: transform 0.15s ease; }
+.ft-tile:hover { transform: translateY(-2px); }
+.ft-bull-hi  { background: rgba(16,185,129,0.32); }
+.ft-bull-md  { background: rgba(16,185,129,0.18); }
+.ft-bull-lo  { background: rgba(16,185,129,0.09); }
+.ft-bear-hi  { background: rgba(244,63,94,0.32); }
+.ft-bear-md  { background: rgba(244,63,94,0.18); }
+.ft-bear-lo  { background: rgba(244,63,94,0.09); }
+.ft-doji     { background: rgba(148,163,184,0.10); }
+
+.ft-mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.ft-muted { color: #94A3B8; }
+.ft-small { font-size: 0.78rem; }
+
+/* Probability bar */
+.ft-pbar { height: 6px; border-radius: 3px; background: rgba(255,255,255,0.08);
+    overflow: hidden; position: relative; }
+.ft-pbar > div { height: 100%; }
+.ft-pbar .mid { position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px;
+    background: rgba(255,255,255,0.35); }
+
+th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+th.sortable:hover { color: #F8FAFC; }
+.ft-table td { font-size: 0.88rem; padding: 0.7rem 0.75rem !important; }
+.ft-badge-src { font-size: 0.65rem; letter-spacing: 0.5px; }
+{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
+    <div>
+        <h2 class="mb-1">Foresight<span style="background:linear-gradient(135deg,#60A5FA,#A78BFA);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">Tape</span></h2>
+        <div class="ft-muted ft-small">
+            Next-session probability forecasts — Student-t distribution over volatility-scaled
+            returns{% if catalyst_available %}, with a Claude-researched catalyst overlay{% endif %}.
+        </div>
+    </div>
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+        {% if catalyst_available %}
+        <div class="form-check form-switch me-2" title="Blend in web-researched catalysts (earnings, Fed, news) via Claude">
+            <input class="form-check-input" type="checkbox" id="catalystToggle" checked>
+            <label class="form-check-label ft-small" for="catalystToggle">Catalyst overlay</label>
+        </div>
+        {% else %}
+        <span class="badge badge-neutral" title="Set ANTHROPIC_API_KEY on the server to enable the Claude catalyst overlay">quant-only mode</span>
+        {% endif %}
+        <button id="scanBtn" class="btn btn-primary btn-sm px-3">
+            <i class="fa-solid fa-satellite-dish me-1"></i> Scan market
+        </button>
+    </div>
+</div>
+
+<div id="tapeWrap" class="ft-tape-wrap d-none"><div id="tape" class="ft-tape"></div></div>
+
+<div id="statusBar" class="alert d-none ft-small py-2" role="alert"></div>
+
+<ul class="nav nav-pills mb-3 gap-1" id="ftTabs">
+    <li class="nav-item"><button class="nav-link active btn-sm" data-view="heatmap">Heatmap</button></li>
+    <li class="nav-item"><button class="nav-link btn-sm" data-view="screener">Screener</button></li>
+    <li class="nav-item"><button class="nav-link btn-sm" data-view="watch">Watchlist</button></li>
+    <li class="nav-item"><button class="nav-link btn-sm" data-view="score">Accuracy</button></li>
+</ul>
+
+<!-- HEATMAP -->
+<div id="view-heatmap" class="ft-view">
+    <div id="heatmapEmpty" class="card"><div class="card-body text-center ft-muted py-5">
+        No forecast yet. <b>Scan market</b> builds a probability board for every tracked ticker —
+        the tape, heatmap and screener all fill from one scan.
+    </div></div>
+    <div id="heatmapGrid" class="row g-2 d-none"></div>
+    <div class="ft-small ft-muted mt-3 d-none" id="heatmapLegend">
+        Tile shade = conviction &middot; green/red = predicted direction &middot; grey doji = no edge
+        &middot; P(up) is the modelled probability the next session closes higher.
+    </div>
+</div>
+
+<!-- SCREENER -->
+<div id="view-screener" class="ft-view d-none">
+    <div class="card"><div class="table-responsive">
+        <table class="table table-dark table-hover ft-table mb-0">
+            <thead><tr id="screenerHead"></tr></thead>
+            <tbody id="screenerBody"></tbody>
+        </table>
+    </div></div>
+</div>
+
+<!-- WATCHLIST -->
+<div id="view-watch" class="ft-view d-none">
+    <div class="d-flex gap-2 mb-3 flex-wrap">
+        <input id="wlInput" class="form-control ft-mono" style="max-width:480px"
+               placeholder="LMT, XOM, CRWD, BRK-B, ^VIX …" autocomplete="off">
+        <button id="wlBtn" class="btn btn-primary btn-sm px-3">Forecast</button>
+    </div>
+    <div id="wlEmpty" class="card"><div class="card-body text-center ft-muted py-5">
+        Up to 12 symbols. Each gets the same treatment as the board: a year of history through the
+        volatility engine, then the catalyst overlay if enabled.
+    </div></div>
+    <div class="card d-none" id="wlCard"><div class="table-responsive">
+        <table class="table table-dark table-hover ft-table mb-0">
+            <thead><tr id="wlHead"></tr></thead>
+            <tbody id="wlBody"></tbody>
+        </table>
+    </div></div>
+</div>
+
+<!-- ACCURACY -->
+<div id="view-score" class="ft-view d-none">
+    <div class="row g-3 mb-3" id="scoreCards"></div>
+    <div class="row g-3">
+        <div class="col-lg-5">
+            <div class="card h-100"><div class="card-header">Calibration (90d)</div>
+                <div class="table-responsive"><table class="table table-dark ft-table mb-0">
+                    <thead><tr><th>Forecast P(up)</th><th class="text-end">N</th>
+                        <th class="text-end">Realized up-rate</th></tr></thead>
+                    <tbody id="calibBody"></tbody>
+                </table></div>
+            </div>
+        </div>
+        <div class="col-lg-7">
+            <div class="card h-100"><div class="card-header">Recently graded forecasts</div>
+                <div class="table-responsive"><table class="table table-dark ft-table mb-0">
+                    <thead><tr><th>Ticker</th><th>Session</th><th>Call</th>
+                        <th class="text-end">P(up)</th><th class="text-end">Realized</th>
+                        <th class="text-end">Brier</th></tr></thead>
+                    <tbody id="recentBody"></tbody>
+                </table></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="ft-small ft-muted mt-4 pt-3 border-top" style="border-color:var(--border-color)!important">
+    Forecasts, not advice. Every number is a modelled probability distribution over the next
+    session, scored after the fact on the Accuracy tab — a next-session candle is the noisiest
+    object in markets, and a well-calibrated board hugs 50%. Doji means the honest answer is
+    "no edge."
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(() => {
+"use strict";
+
+const $ = (id) => document.getElementById(id);
+const state = { market: null, watch: null, sortKey: "conviction", sortDir: -1,
+                wlSortKey: "conviction", wlSortDir: -1, loading: false };
+
+// ---------- helpers ----------
+const fmtPct = (v, signed = true) =>
+    v == null ? "—" : `${signed && v > 0 ? "+" : ""}${v.toFixed(2)}%`;
+const dirWord = (d) => d === "bull" ? "Bullish" : d === "bear" ? "Bearish" : "Doji";
+const dirClass = (d) => d === "bull" ? "text-success" : d === "bear" ? "text-danger" : "ft-muted";
+const dirArrow = (d) => d === "bull" ? "▲" : d === "bear" ? "▼" : "—";
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g,
+    (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+function status(msg, kind = "info") {
+    const el = $("statusBar");
+    if (!msg) { el.classList.add("d-none"); return; }
+    el.className = `alert alert-${kind} ft-small py-2`;
+    el.innerHTML = msg;
+}
+
+function useCatalyst() {
+    const t = $("catalystToggle");
+    return t ? t.checked : false;
+}
+
+async function getJSON(url) {
+    const res = await fetch(url);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    return data;
+}
+
+// ---------- tape ----------
+function renderTape() {
+    const rows = [ ...(state.market?.rows || []), ...(state.watch?.rows || []) ];
+    const seen = new Set(), unique = [];
+    for (const r of rows) if (!seen.has(r.ticker)) { seen.add(r.ticker); unique.push(r); }
+    if (!unique.length) { $("tapeWrap").classList.add("d-none"); return; }
+
+    const chip = (r) => `<span class="chip">
+        <b>${esc(r.ticker)}</b>
+        <span class="${dirClass(r.direction)}">${dirArrow(r.direction)}</span>
+        <span class="${dirClass(r.direction)}">${(r.p_up * 100).toFixed(0)}%↑</span>
+        <span class="ft-muted">±${r.band_68_pct.toFixed(1)}%</span>
+    </span>`;
+    const strip = unique.map(chip).join("");
+    $("tape").innerHTML = strip + strip;   // doubled for the seamless loop
+    $("tapeWrap").classList.remove("d-none");
+}
+
+// ---------- heatmap ----------
+function tileClass(r) {
+    if (r.direction === "doji") return "ft-doji";
+    const base = r.direction === "bull" ? "ft-bull" : "ft-bear";
+    return `${base}-${r.conviction >= 65 ? "hi" : r.conviction >= 45 ? "md" : "lo"}`;
+}
+
+function renderHeatmap() {
+    const rows = state.market?.rows || [];
+    $("heatmapEmpty").classList.toggle("d-none", !!rows.length);
+    $("heatmapGrid").classList.toggle("d-none", !rows.length);
+    $("heatmapLegend").classList.toggle("d-none", !rows.length);
+    if (!rows.length) return;
+
+    $("heatmapGrid").innerHTML = rows.map((r) => `
+        <div class="col-6 col-md-4 col-xl-3">
+            <div class="ft-tile ${tileClass(r)}" title="${esc(r.rationale)}">
+                <div class="d-flex justify-content-between align-items-baseline">
+                    <span class="ft-mono fw-bold">${esc(r.ticker)}</span>
+                    <span class="ft-mono ft-small ${dirClass(r.direction)}">${(r.p_up * 100).toFixed(0)}%↑</span>
+                </div>
+                <div class="ft-small ft-muted text-truncate">${esc(r.name || "")}</div>
+                <div class="ft-small ft-mono mt-1">
+                    <span class="${dirClass(r.direction)}">${fmtPct(r.expected_move_pct)}</span>
+                    <span class="ft-muted"> · ±${r.band_68_pct.toFixed(1)}%</span>
+                </div>
+                ${r.catalyst ? `<div class="ft-small mt-1 text-warning-emphasis text-truncate"
+                    title="${esc(r.catalyst)}">⚡ ${esc(r.catalyst)}</div>` : ""}
+            </div>
+        </div>`).join("");
+}
+
+// ---------- screener tables ----------
+const COLUMNS = [
+    { key: "ticker",            label: "Symbol",     num: false },
+    { key: "direction",         label: "Signal",     num: false },
+    { key: "p_up",              label: "P(up)",      num: true  },
+    { key: "expected_move_pct", label: "Exp. move",  num: true  },
+    { key: "band_68_pct",       label: "±1σ",        num: true  },
+    { key: "conviction",        label: "Conviction", num: true  },
+    { key: "vol_regime",        label: "Vol",        num: false },
+    { key: "rationale",         label: "Why",        num: false, sortable: false },
+];
+
+function sortRows(rows, key, dir) {
+    const order = { bull: 2, doji: 1, bear: 0 };
+    return [...rows].sort((a, b) => {
+        let av = a[key], bv = b[key];
+        if (key === "direction") { av = order[av] ?? 0; bv = order[bv] ?? 0; }
+        if (typeof av === "string") return dir * av.localeCompare(bv);
+        return dir * ((av ?? 0) - (bv ?? 0));
+    });
+}
+
+function pbar(r) {
+    const p = r.p_up, up = p >= 0.5;
+    const width = Math.abs(p - 0.5) * 200;   // as % of half the bar
+    const color = r.direction === "doji" ? "#94A3B8" : up ? "#10B981" : "#F43F5E";
+    const side = up ? "margin-left:50%" : `margin-left:${50 - width / 2}%`;
+    return `<div class="ft-pbar" title="P(up) ${(p * 100).toFixed(1)}%">
+        <div style="width:${(width / 2).toFixed(1)}%;${side};background:${color}"></div>
+        <span class="mid"></span></div>`;
+}
+
+function rowHTML(r) {
+    const src = r.source === "blended"
+        ? `<span class="badge badge-neutral ft-badge-src ms-1" title="Catalyst overlay applied (shift ${r.catalyst_shift >= 0 ? "+" : ""}${r.catalyst_shift}, vol ×${r.vol_multiplier})">AI</span>`
+        : "";
+    return `<tr>
+        <td class="ft-mono fw-bold">${esc(r.ticker)}${src}
+            <div class="ft-small ft-muted fw-normal text-truncate" style="max-width:140px">${esc(r.name || "")}</div></td>
+        <td class="${dirClass(r.direction)}">${dirArrow(r.direction)} ${dirWord(r.direction)}</td>
+        <td class="text-end" style="min-width:110px">
+            <span class="ft-mono">${(r.p_up * 100).toFixed(1)}%</span>${pbar(r)}</td>
+        <td class="text-end ft-mono ${dirClass(r.direction)}">${fmtPct(r.expected_move_pct)}</td>
+        <td class="text-end ft-mono ft-muted">±${r.band_68_pct.toFixed(2)}%</td>
+        <td class="text-end ft-mono">${r.conviction}</td>
+        <td><span class="badge ${r.vol_regime === "stressed" ? "badge-bearish" : r.vol_regime === "calm" ? "badge-bullish" : "badge-neutral"}">${esc(r.vol_regime)}</span></td>
+        <td class="ft-small ft-muted" style="max-width:340px">${esc(r.rationale)}</td>
+    </tr>`;
+}
+
+function renderTable(headId, bodyId, rows, keyName, dirName) {
+    const head = COLUMNS.map((c) => {
+        const active = state[keyName] === c.key;
+        const arrow = active ? (state[dirName] === -1 ? " ↓" : " ↑") : "";
+        const cls = c.sortable === false ? "" : "sortable";
+        return `<th class="${cls} ${c.num ? "text-end" : ""}" data-key="${c.key}">${c.label}${arrow}</th>`;
+    }).join("");
+    $(headId).innerHTML = head;
+    $(headId).querySelectorAll("th.sortable").forEach((th) => th.onclick = () => {
+        const k = th.dataset.key;
+        if (state[keyName] === k) state[dirName] *= -1;
+        else { state[keyName] = k; state[dirName] = -1; }
+        renderAll();
+    });
+    $(bodyId).innerHTML = sortRows(rows, state[keyName], state[dirName]).map(rowHTML).join("")
+        || `<tr><td colspan="8" class="text-center ft-muted py-4">No rows.</td></tr>`;
+}
+
+// ---------- accuracy ----------
+function scoreCard(label, value, hint) {
+    return `<div class="col-6 col-lg-3"><div class="card stat-card h-100" title="${esc(hint)}">
+        <div class="value">${value}</div><div class="label">${label}</div></div></div>`;
+}
+
+async function loadScorecard() {
+    try {
+        const data = await getJSON("/foresight/api/scorecard");
+        const s = data.scorecard || {};
+        if (!s.resolved) {
+            $("scoreCards").innerHTML = `<div class="col-12"><div class="card"><div
+                class="card-body ft-muted">${esc(s.message || "No resolved forecasts yet.")}</div></div></div>`;
+            $("calibBody").innerHTML = $("recentBody").innerHTML = "";
+            return;
+        }
+        const skill = s.brier_skill_score;
+        $("scoreCards").innerHTML =
+            scoreCard("Resolved forecasts", s.resolved, `Trailing ${s.window_days} days`) +
+            scoreCard("Brier score", s.brier.toFixed(3), "Mean squared probability error — lower is better; 0.25 = coin flip") +
+            scoreCard("Skill vs coin flip", `<span class="${skill > 0 ? "text-success" : "text-danger"}">${(skill * 100).toFixed(1)}%</span>`,
+                "Positive = the engine beats always saying 50/50") +
+            scoreCard("Directional hit rate", s.hit_rate == null ? "—" : (s.hit_rate * 100).toFixed(1) + "%",
+                `${s.directional_calls} bull/bear calls; dojis (${s.doji_calls}) excluded`);
+        $("calibBody").innerHTML = (s.calibration || []).map((b) => `<tr>
+            <td class="ft-mono">${b.range}</td><td class="text-end">${b.count}</td>
+            <td class="text-end ft-mono">${(b.realized_up_rate * 100).toFixed(0)}%</td></tr>`).join("")
+            || `<tr><td colspan="3" class="ft-muted text-center py-3">Not enough data yet.</td></tr>`;
+        $("recentBody").innerHTML = (data.recent || []).map((r) => `<tr>
+            <td class="ft-mono fw-bold">${esc(r.ticker)}</td>
+            <td class="ft-small ft-muted">${esc(r.target_date || "")}</td>
+            <td class="${dirClass(r.direction)}">${dirWord(r.direction)}</td>
+            <td class="text-end ft-mono">${(r.p_up * 100).toFixed(0)}%</td>
+            <td class="text-end ft-mono ${r.realized_return_pct >= 0 ? "text-success" : "text-danger"}">${fmtPct(r.realized_return_pct)}</td>
+            <td class="text-end ft-mono">${r.brier.toFixed(3)}</td></tr>`).join("")
+            || `<tr><td colspan="6" class="ft-muted text-center py-3">Nothing graded yet.</td></tr>`;
+    } catch (e) {
+        $("scoreCards").innerHTML = `<div class="col-12"><div class="alert alert-danger ft-small">${esc(e.message)}</div></div>`;
+    }
+}
+
+// ---------- actions ----------
+function setLoading(on, label) {
+    state.loading = on;
+    $("scanBtn").disabled = on;
+    $("wlBtn").disabled = on;
+    if (on) status(`<span class="spinner-border spinner-border-sm me-2"></span>${label}`, "info");
+}
+
+async function scanMarket() {
+    if (state.loading) return;
+    const cat = useCatalyst();
+    setLoading(true, cat
+        ? "Running volatility engine, then researching catalysts with Claude — this can take a minute…"
+        : "Running the volatility engine across the board…");
+    try {
+        state.market = await getJSON(`/foresight/api/market?catalyst=${cat ? 1 : 0}`);
+        sessionStorage.setItem("ft-market", JSON.stringify(state.market));
+        const meta = state.market;
+        const note = [];
+        if (meta.rows?.length) note.push(`${meta.rows.length} tickers forecast`);
+        if (meta.catalyst_applied) note.push("catalyst overlay applied");
+        else if (cat && meta.catalyst_available) note.push("catalyst overlay unavailable this run — quant-only");
+        if (meta.skipped?.length) note.push(`${meta.skipped.length} skipped`);
+        status(meta.error ? esc(meta.error) : note.join(" · "), meta.error ? "danger" : "success");
+        setTimeout(() => { if (!state.loading) status(null); }, 6000);
+    } catch (e) {
+        status(`Scan failed: ${esc(e.message)}`, "danger");
+    }
+    setLoading(false);
+    renderAll();
+}
+
+async function scanWatchlist() {
+    if (state.loading) return;
+    const raw = $("wlInput").value.trim();
+    if (!raw) return;
+    setLoading(true, "Forecasting watchlist…");
+    try {
+        state.watch = await getJSON(
+            `/foresight/api/watchlist?tickers=${encodeURIComponent(raw)}&catalyst=${useCatalyst() ? 1 : 0}`);
+        sessionStorage.setItem("ft-watch", JSON.stringify(state.watch));
+        sessionStorage.setItem("ft-watch-input", raw);
+        status(state.watch.error ? esc(state.watch.error) : null,
+               state.watch.error ? "danger" : "info");
+    } catch (e) {
+        status(`Watchlist failed: ${esc(e.message)}`, "danger");
+    }
+    setLoading(false);
+    renderAll();
+}
+
+// ---------- view switching ----------
+function renderAll() {
+    renderTape();
+    renderHeatmap();
+    renderTable("screenerHead", "screenerBody", state.market?.rows || [], "sortKey", "sortDir");
+    const wlRows = state.watch?.rows || [];
+    $("wlEmpty").classList.toggle("d-none", !!wlRows.length);
+    $("wlCard").classList.toggle("d-none", !wlRows.length);
+    if (wlRows.length) renderTable("wlHead", "wlBody", wlRows, "wlSortKey", "wlSortDir");
+}
+
+document.querySelectorAll("#ftTabs .nav-link").forEach((btn) => btn.onclick = () => {
+    document.querySelectorAll("#ftTabs .nav-link").forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+    document.querySelectorAll(".ft-view").forEach((v) => v.classList.add("d-none"));
+    $(`view-${btn.dataset.view}`).classList.remove("d-none");
+    if (btn.dataset.view === "score") loadScorecard();
+});
+
+$("scanBtn").onclick = scanMarket;
+$("wlBtn").onclick = scanWatchlist;
+$("wlInput").addEventListener("keydown", (e) => { if (e.key === "Enter") scanWatchlist(); });
+
+// Restore the last scan within this browser session so tab switches are free.
+try {
+    state.market = JSON.parse(sessionStorage.getItem("ft-market") || "null");
+    state.watch = JSON.parse(sessionStorage.getItem("ft-watch") || "null");
+    $("wlInput").value = sessionStorage.getItem("ft-watch-input") || "";
+} catch { /* cold start */ }
+renderAll();
+})();
+</script>
+{% endblock %}

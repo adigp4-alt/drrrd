@@ -9,3 +9,4 @@ numpy>=1.25.2
 scikit-learn>=1.3.0
 vaderSentiment==3.3.2
 statsmodels
+anthropic>=0.69.0

@@ -2,6 +2,31 @@
 
 A full-stack web application that automatically tracks all 36 tickers from the Iran Regime Change Investment Plan. Live prices, auto-refresh, alerts, CSV export, and a production-ready dashboard.
 
+## 🔮 ForesightTape — Next-Session Forecast Engine (`/foresight`)
+
+A probability board for the next trading session, built from two layers:
+
+1. **Quant prior** (`app/forecast_quant.py`) — a Student-t distribution over the next
+   session's return, with volatility from a Yang-Zhang + EWMA blend and a heavily
+   shrunk drift from momentum/trend/reversal signals. Runs from price history alone —
+   no API key required.
+2. **Catalyst overlay** (`app/forecast_catalyst.py`, optional) — Claude researches live
+   catalysts (earnings dates, Fed events, breaking news) via web search and returns a
+   *bounded* tilt on each prior: at most a few probability points of direction and a
+   capped volatility multiplier. Enable it by setting `ANTHROPIC_API_KEY` in the server
+   environment. Without the key the board runs quant-only. The key never reaches the
+   browser.
+
+Every published forecast is stored (`forecasts` table) and graded once its target
+session closes — Brier score, skill vs. coin flip, hit rate and a calibration table
+live on the **Accuracy** tab. The board's honesty is enforced by construction: the
+engine cannot claim more than a modest edge on a daily candle, and "doji" (no edge) is
+a first-class call.
+
+Endpoints: `/foresight/api/market`, `/foresight/api/watchlist?tickers=…`,
+`/foresight/api/scorecard`, `POST /foresight/api/resolve`.
+Tests: `python -m unittest discover -s tests`.
+
 ---
 
 ## 🚀 Deploy in Under 5 Minutes

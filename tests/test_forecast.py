@@ -325,16 +325,16 @@ class LedgerTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
         self.tmp.close()
-        from app import models
-        self.models = models
-        self._original_path = models.DB_PATH
-        models.DB_PATH = Path(self.tmp.name)
+        from app import config, models
+        self.config = config
+        self._original_path = config.DB_PATH
+        config.DB_PATH = Path(self.tmp.name)
         models.init_db()
         from app import forecast_ledger
         self.ledger = forecast_ledger
 
     def tearDown(self):
-        self.models.DB_PATH = self._original_path
+        self.config.DB_PATH = self._original_path
         os.unlink(self.tmp.name)
 
     def _forecast(self, ticker, asof, direction, p_up, close=100.0):

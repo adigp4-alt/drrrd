@@ -1,11 +1,22 @@
 """Tier configuration and ticker metadata."""
 
+import os
 from pathlib import Path
 
-DATA_DIR = Path("data")
-DATA_DIR.mkdir(exist_ok=True)
+# Where CSV snapshots and the SQLite database live. Override with the DATA_DIR
+# environment variable to point at a mounted volume (a Render disk, a Railway
+# volume, a Docker `-v` mount) so data survives a redeploy. Without a mount the
+# container filesystem is ephemeral and this resets on every deploy.
+DATA_DIR = Path(os.environ.get("DATA_DIR", "data"))
+DATA_DIR.mkdir(parents=True, exist_ok=True)
 SNAPSHOT_CSV = DATA_DIR / "snapshots.csv"
 DB_PATH = DATA_DIR / "tracker.db"
+
+# Optional Postgres connection string. When set, all relational storage
+# (holdings, watchlist, alerts, and the forecast ledger) uses Postgres instead
+# of SQLite — the durable option on hosts whose disks are ephemeral, and the
+# only one that survives a redeploy on a free tier with no volume attached.
+DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 
 TIERS = {
     "T1": {

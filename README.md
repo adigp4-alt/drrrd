@@ -27,6 +27,20 @@ Endpoints: `/foresight/api/market`, `/foresight/api/watchlist?tickers=…`,
 `/foresight/api/scorecard`, `POST /foresight/api/resolve`.
 Tests: `python -m unittest discover -s tests`.
 
+### ⚠️ Keeping the accuracy history
+
+The forecast ledger is only meaningful if it survives redeploys. By default the
+app writes SQLite to `data/tracker.db` — fine locally, but on a host with an
+ephemeral filesystem (including Render's free plan) **every redeploy wipes the
+scorecard and it restarts from zero.** Two ways to keep it:
+
+| Option | Set | Notes |
+|---|---|---|
+| **Postgres** | `DATABASE_URL` | Works on free tiers with no volume. Any Postgres URL — Render, Neon, Supabase. Schema is created automatically on boot. |
+| **Mounted volume** | `DATA_DIR` | Point at a Render disk / Railway volume / Docker `-v` mount, e.g. `DATA_DIR=/var/data`. Render disks need a paid instance type. |
+
+`render.yaml` has both wired up as commented blocks — uncomment whichever you want.
+
 ---
 
 ## 🚀 Deploy in Under 5 Minutes
@@ -186,6 +200,17 @@ iran-tracker-web/
 | `/api/history` | GET | 30-day price history for sparklines (JSON) |
 | `/api/refresh` | POST | Force an immediate data refresh |
 | `/api/download/csv` | GET | Download full snapshot history as CSV |
+
+---
+
+## 🔑 Environment Variables
+
+| Variable | Required | Purpose |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | No | Enables the Claude catalyst overlay on `/foresight`. Unset = quant-only mode. Set it in your host's dashboard — never commit it. |
+| `DATABASE_URL` | No | Postgres connection string. When set, all storage uses Postgres instead of SQLite. |
+| `DATA_DIR` | No | Where SQLite and CSV snapshots are written (default `data`). Point at a mounted volume to persist across redeploys. |
+| `PORT` | No | Port to bind (default `5000`). Most hosts set this for you. |
 
 ---
 

@@ -369,6 +369,42 @@ async function loadScorecard() {
     }
 }
 
+// ---------- diagnostics ----------
+async function runDiagnostics() {
+    const out = $("diagOut");
+    if (!out) return;
+    out.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>Probing DNS, Yahoo over HTTPS, and yfinance…`;
+    try {
+        const d = await getJSON("/foresight/api/diagnostics");
+        const v = d.verdict || {};
+        const p = d.probes || {};
+        const https = p.https_direct || {};
+        const yfin = p.yfinance || {};
+        out.innerHTML = `
+          <div class="card"><div class="card-body">
+            <div class="fw-semibold mb-1">${esc(v.summary || "")}</div>
+            <div class="ft-small ft-muted mb-2">Cause: <code>${esc(v.cause || "unknown")}</code></div>
+            <div class="ft-small mb-3"><b>What to do:</b> ${esc(v.action || "")}</div>
+            <table class="table table-dark ft-table mb-2"><tbody>
+              <tr><td>Yahoo over HTTPS</td><td class="text-end ft-mono">${
+                  https.ok ? "OK " + (https.status_code ?? "") : "FAILED " + esc(https.status_code ?? https.error ?? "")}</td></tr>
+              <tr><td>yfinance download()</td><td class="text-end ft-mono">${
+                  (yfin.download || {}).ok ? "OK (" + yfin.download.rows + " rows)" : "no data"}</td></tr>
+              <tr><td>yfinance Ticker.history()</td><td class="text-end ft-mono">${
+                  (yfin.ticker_history || {}).ok ? "OK (" + yfin.ticker_history.rows + " rows)" : "no data"}</td></tr>
+              <tr><td>Engine parser</td><td class="text-end ft-mono">${
+                  (p.engine_fetch || {}).ok ? "OK (" + p.engine_fetch.bars + " bars)" : "no bars"}</td></tr>
+              <tr><td class="ft-muted">yfinance version</td><td class="text-end ft-mono ft-muted">${esc((d.versions || {}).yfinance || "?")}</td></tr>
+            </tbody></table>
+            <details><summary class="ft-small ft-muted">Raw probe output</summary>
+              <pre class="ft-small mt-2 mb-0" style="white-space:pre-wrap;max-height:320px;overflow:auto">${esc(JSON.stringify(d, null, 2))}</pre>
+            </details>
+          </div></div>`;
+    } catch (e) {
+        out.innerHTML = `<span class="text-danger ft-small">Diagnostics failed: ${esc(e.message)}</span>`;
+    }
+}
+
 // ---------- backtest ----------
 function verdict(s) {
     const b = s.baselines || {};
@@ -489,8 +525,22 @@ async function scanMarket() {
         if (meta.catalyst_applied) note.push("catalyst overlay applied");
         else if (cat && meta.catalyst_available) note.push("catalyst overlay unavailable this run — quant-only");
         if (meta.skipped?.length) note.push(`${meta.skipped.length} skipped`);
-        status(meta.error ? esc(meta.error) : note.join(" · "), meta.error ? "danger" : "success");
-        setTimeout(() => { if (!state.loading) status(null); }, 6000);
+
+        if (meta.error) {
+            // An empty board is a symptom; show the cause and a way to diagnose it.
+            status(
+                `<div><b>Scan returned no data.</b></div>` +
+                `<div class="mt-1">${esc(meta.error)}</div>` +
+                `<div class="mt-2"><button id="diagBtn" class="btn btn-sm btn-outline-light">` +
+                `Diagnose market-data connection</button></div>` +
+                `<div id="diagOut" class="mt-2"></div>`,
+                "danger");
+            const db = $("diagBtn");
+            if (db) db.onclick = runDiagnostics;
+        } else {
+            status(note.join(" · "), "success");
+            setTimeout(() => { if (!state.loading) status(null); }, 6000);
+        }
     } catch (e) {
         status(`Scan failed: ${esc(e.message)}`, "danger");
     }

@@ -8,6 +8,7 @@ import yfinance as yf
 import pandas as pd
 
 from app.config import ALL_TICKERS, TICKER_META, SNAPSHOT_CSV
+from app.market_data import extract_symbol_frame
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +33,8 @@ def fetch_prices():
 
     for sym in ALL_TICKERS:
         try:
-            df = raw[sym] if len(ALL_TICKERS) > 1 else raw
-            if df.empty or df.dropna(how="all").empty:
+            df = extract_symbol_frame(raw, sym)
+            if df is None or df.empty or df.dropna(how="all").empty:
                 continue
 
             closes = df.dropna(subset=["Close"])
@@ -87,7 +88,9 @@ def fetch_history_data(days=30):
         history = {}
         for sym in ALL_TICKERS:
             try:
-                df = raw[sym] if len(ALL_TICKERS) > 1 else raw
+                df = extract_symbol_frame(raw, sym)
+                if df is None:
+                    continue
                 closes = df["Close"].dropna()
                 history[sym] = [
                     {"date": d.strftime("%Y-%m-%d"), "close": round(float(p), 2)}
@@ -104,8 +107,9 @@ def fetch_history_data(days=30):
 def fetch_analysis_data(ticker, period="6mo"):
     """Fetch OHLCV data for technical analysis."""
     try:
-        df = yf.download(ticker, period=period, progress=False)
-        if df.empty:
+        raw = yf.download(ticker, period=period, progress=False, auto_adjust=False)
+        df = extract_symbol_frame(raw, ticker)
+        if df is None or df.empty:
             return None
         records = []
         for date, row in df.iterrows():

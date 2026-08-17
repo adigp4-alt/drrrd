@@ -8,7 +8,13 @@ import logging
 
 from flask import Blueprint, jsonify, render_template, request
 
-from app import forecast_backtest, forecast_catalyst, forecast_engine, forecast_ledger
+from app import (
+    forecast_backtest,
+    forecast_catalyst,
+    forecast_diagnostics,
+    forecast_engine,
+    forecast_ledger,
+)
 from app.config import ALL_TICKERS
 
 logger = logging.getLogger(__name__)
@@ -76,6 +82,21 @@ def api_scorecard():
         })
     except Exception as exc:
         logger.exception("Scorecard query failed")
+        return jsonify({"error": f"{type(exc).__name__}: {exc}"}), 500
+
+
+@bp.route("/api/diagnostics")
+def api_diagnostics():
+    """Identify why market data is unavailable.
+
+    Probes DNS, raw HTTPS to Yahoo, both yfinance code paths, and the engine's
+    own parser — so a blocked IP, a rate limit and a library version change are
+    told apart instead of all surfacing as an empty board.
+    """
+    try:
+        return jsonify(forecast_diagnostics.run_diagnostics())
+    except Exception as exc:
+        logger.exception("Diagnostics failed")
         return jsonify({"error": f"{type(exc).__name__}: {exc}"}), 500
 
 

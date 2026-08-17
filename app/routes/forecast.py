@@ -8,7 +8,8 @@ import logging
 
 from flask import Blueprint, jsonify, render_template, request
 
-from app import forecast_catalyst, forecast_engine, forecast_ledger
+from app import forecast_backtest, forecast_catalyst, forecast_engine, forecast_ledger
+from app.config import ALL_TICKERS
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +76,39 @@ def api_scorecard():
         })
     except Exception as exc:
         logger.exception("Scorecard query failed")
+        return jsonify({"error": f"{type(exc).__name__}: {exc}"}), 500
+
+
+@bp.route("/api/backtest")
+def api_backtest():
+    """Walk-forward replay of the quant engine over historical sessions.
+
+    Answers "does this thing actually work" without waiting weeks for the live
+    ledger to fill. Results are intentionally **not** written to the ledger —
+    mixing simulated history into the live scorecard would overstate the real
+    track record.
+    """
+    raw = request.args.get("tickers", "")
+    tickers = forecast_engine.parse_tickers(raw) if raw else list(ALL_TICKERS)
+    if not tickers:
+        return jsonify({"error": "No valid ticker symbols supplied."}), 400
+
+    try:
+        sessions = max(20, min(int(request.args.get("sessions", 250)),
+                               forecast_backtest.MAX_SESSIONS))
+    except (TypeError, ValueError):
+        sessions = 250
+
+    period = request.args.get("period", "2y")
+    if period not in ("1y", "2y", "5y", "10y", "max"):
+        period = "2y"
+
+    try:
+        return jsonify(forecast_backtest.run_backtest(
+            tickers, period=period, max_sessions=sessions
+        ))
+    except Exception as exc:
+        logger.exception("Backtest failed")
         return jsonify({"error": f"{type(exc).__name__}: {exc}"}), 500
 
 

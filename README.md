@@ -233,6 +233,7 @@ iran-tracker-web/
 | `ANTHROPIC_API_KEY` | No | Enables the Claude catalyst overlay on `/foresight`. Unset = quant-only mode. Set it in your host's dashboard — never commit it. |
 | `DATABASE_URL` | No | Postgres connection string. When set, all storage uses Postgres instead of SQLite. |
 | `DATA_DIR` | No | Where SQLite and CSV snapshots are written (default `data`). Point at a mounted volume to persist across redeploys. |
+| `MARKET_DATA_SOURCE` | No | `auto` (default) tries Yahoo and falls back to Stooq per ticker; `yahoo` or `stooq` forces one provider. |
 | `PORT` | No | Port to bind (default `5000`). Most hosts set this for you. |
 
 ---

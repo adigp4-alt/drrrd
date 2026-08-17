@@ -126,6 +126,24 @@ def _yfinance_probe() -> dict:
     return results
 
 
+def _stooq_probe() -> dict:
+    """Try the fallback provider. If this works, the board can work."""
+    from app.market_data import fetch_stooq, stooq_symbol
+
+    try:
+        started = time.time()
+        bars = fetch_stooq(CANARY)
+        return {
+            "ok": bool(bars),
+            "symbol": stooq_symbol(CANARY),
+            "ms": round((time.time() - started) * 1000, 1),
+            "bars": len(bars),
+            "latest": bars[-1]["date"] if bars else None,
+        }
+    except Exception as exc:
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+
+
 def _engine_probe() -> dict:
     """Run the engine's own fetch path and report what it produced."""
     from app.forecast_engine import fetch_bars_with_reasons
@@ -144,7 +162,8 @@ def _engine_probe() -> dict:
         return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
 
 
-def _verdict(dns: dict, https: dict, yfin: dict, engine: dict) -> dict:
+def _verdict(dns: dict, https: dict, yfin: dict, engine: dict,
+             stooq: dict) -> dict:
     """Turn the probe results into a cause and a recommended action."""
     resolved = any(v.get("resolved") for v in dns.values())
     if not resolved:
@@ -155,13 +174,23 @@ def _verdict(dns: dict, https: dict, yfin: dict, engine: dict) -> dict:
                       "platform's egress settings.",
         }
 
+    # A working fallback changes the recommended action entirely: the board can
+    # serve data even while Yahoo refuses this host.
+    fallback_note = (
+        " The Stooq fallback IS working, so the board should still populate — "
+        "if it does not, redeploy to pick up the fallback."
+        if stooq.get("ok") else
+        " The Stooq fallback is also failing, so this host likely has no "
+        "outbound access to market data at all."
+    )
+
     if https.get("status_code") == 429:
         return {
             "cause": "rate_limited",
             "summary": "Yahoo Finance is rate-limiting this host (HTTP 429).",
             "action": "Cloud provider IP ranges get throttled aggressively. Wait "
                       "and retry, reduce scan frequency, or route market data "
-                      "through a different egress or data provider.",
+                      "through a different egress or data provider." + fallback_note,
         }
 
     if https.get("status_code") in (401, 403):
@@ -169,8 +198,7 @@ def _verdict(dns: dict, https: dict, yfin: dict, engine: dict) -> dict:
             "cause": "ip_blocked",
             "summary": f"Yahoo Finance refused this host "
                        f"(HTTP {https.get('status_code')}).",
-            "action": "This IP range is blocked. No code change fixes it — use a "
-                      "different host, an egress proxy, or another data provider.",
+            "action": "This IP range is blocked by Yahoo." + fallback_note,
         }
 
     if not https.get("ok"):
@@ -178,7 +206,7 @@ def _verdict(dns: dict, https: dict, yfin: dict, engine: dict) -> dict:
             "cause": "network_blocked",
             "summary": "Could not reach Yahoo Finance over HTTPS.",
             "action": "Outbound HTTPS to Yahoo is failing. Check egress rules, "
-                      "firewall, or proxy configuration on the host.",
+                      "firewall, or proxy on the host." + fallback_note,
         }
 
     download_ok = (yfin.get("download") or {}).get("ok")
@@ -222,8 +250,9 @@ def run_diagnostics() -> dict:
     dns = _dns_probe()
     https = _https_probe()
     yfin = _yfinance_probe()
+    stooq = _stooq_probe()
     engine = _engine_probe()
-    verdict = _verdict(dns, https, yfin, engine)
+    verdict = _verdict(dns, https, yfin, engine, stooq)
 
     logger.info("Market data diagnostics: %s — %s", verdict["cause"],
                 verdict["summary"])
@@ -235,6 +264,7 @@ def run_diagnostics() -> dict:
             "dns": dns,
             "https_direct": https,
             "yfinance": yfin,
+            "stooq_fallback": stooq,
             "engine_fetch": engine,
         },
     }

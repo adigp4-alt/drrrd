@@ -24,6 +24,7 @@ import pandas as pd
 import yfinance as yf
 
 from app.config import ALL_TICKERS, TICKER_META
+from app import market_data
 from app.market_data import extract_symbol_frame
 from app.forecast_quant import (
     classify_direction,
@@ -79,24 +80,33 @@ def fetch_bars_with_reasons(
     unique = sorted(set(tickers))
     reasons: list[str] = []
 
+    if market_data.SOURCE_MODE == "stooq":
+        return _fetch_from_stooq(unique, reasons, note="MARKET_DATA_SOURCE=stooq")
+
+    raw = None
+    yahoo_error = None
     try:
         raw = yf.download(
             " ".join(unique), period=period, group_by="ticker",
             progress=False, auto_adjust=False, threads=True,
         )
     except Exception as exc:
-        message = f"Market data download failed: {type(exc).__name__}: {exc}"
-        logger.error(message)
-        return {}, [message]
+        yahoo_error = f"{type(exc).__name__}: {exc}"
+        logger.error("Yahoo download failed: %s", yahoo_error)
 
     if raw is None or raw.empty:
-        message = (
-            "Yahoo Finance returned no data for any ticker. This is usually the "
-            "host's IP being blocked or rate-limited rather than a bad ticker — "
-            "open /foresight/api/diagnostics to identify the cause."
+        detail = yahoo_error or "empty response"
+        logger.warning("Yahoo returned no usable data (%s)", detail)
+        if market_data.SOURCE_MODE == "yahoo":
+            return {}, [
+                f"Yahoo Finance returned no data ({detail}). This is usually the "
+                "host's IP being blocked or rate-limited — open "
+                "/foresight/api/diagnostics for the exact cause."
+            ]
+        return _fetch_from_stooq(
+            unique, reasons,
+            note=f"Yahoo Finance returned no data ({detail})",
         )
-        logger.error(message)
-        return {}, [message]
 
     out: dict[str, list[dict]] = {}
     parse_failures = []
@@ -129,18 +139,53 @@ def fetch_bars_with_reasons(
 
     if parse_failures:
         logger.warning("Could not parse bars for: %s", ", ".join(parse_failures[:10]))
-        # Every ticker failing to parse while the frame itself has data points at
-        # a response-shape change, not at a data outage — call that out.
+        # Yahoo returning a populated frame that yields *nothing* points at a
+        # response-shape change, not a data outage. Keep that signal — it is the
+        # difference between "upgrade yfinance" and "Yahoo is blocking you".
         if not out:
             reasons.append(
                 "Yahoo returned a response but no ticker could be parsed from it, "
-                "which usually means a yfinance version change. Open "
-                "/foresight/api/diagnostics for a precise cause. First failures: "
+                "which usually means a yfinance version change. First failures: "
                 + ", ".join(parse_failures[:5])
             )
-        else:
-            reasons.append("No data for: " + ", ".join(parse_failures[:10]))
 
+    # Anything Yahoo could not supply, try the fallback provider for. This also
+    # covers the case where Yahoo serves a frame but omits most tickers.
+    missing = [t for t in unique if t not in out]
+    if missing and market_data.SOURCE_MODE != "yahoo":
+        recovered = market_data.fetch_stooq_many(missing)
+        if recovered:
+            out.update(recovered)
+            reasons.append(
+                f"Yahoo had no data for {len(missing)} ticker(s); "
+                f"{len(recovered)} recovered from Stooq."
+            )
+        still_missing = [t for t in missing if t not in out]
+        if still_missing:
+            reasons.append("No data from any source for: "
+                           + ", ".join(still_missing[:10]))
+    elif missing:
+        reasons.append("No data for: " + ", ".join(missing[:10]))
+
+    return out, reasons
+
+
+def _fetch_from_stooq(tickers: list[str], reasons: list[str], note: str
+                      ) -> tuple[dict[str, list[dict]], list[str]]:
+    """Fetch the whole list from the fallback provider."""
+    logger.info("Falling back to Stooq for %d ticker(s): %s", len(tickers), note)
+    out = market_data.fetch_stooq_many(tickers)
+    if out:
+        reasons.append(f"{note}; served {len(out)} ticker(s) from Stooq instead.")
+    else:
+        reasons.append(
+            f"{note}, and the Stooq fallback returned nothing either. This host "
+            "may have no outbound access to market data — open "
+            "/foresight/api/diagnostics for the exact cause."
+        )
+    missing = [t for t in tickers if t not in out]
+    if out and missing:
+        reasons.append("No data from any source for: " + ", ".join(missing[:10]))
     return out, reasons
 
 

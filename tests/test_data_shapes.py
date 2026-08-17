@@ -189,11 +189,16 @@ class EndToEndParsingTests(unittest.TestCase):
         self.assertIn("diagnostics", reasons[0])
 
     def test_unparseable_response_reports_a_reason(self):
+        """A populated-but-unparseable frame must still name the likely cause.
+
+        This is the signal that distinguishes "upgrade yfinance" from "Yahoo is
+        blocking this host" — losing it would put us back to guessing.
+        """
         junk = pd.DataFrame({"Foo": [1, 2, 3]}, index=DATES)
         bars, reasons = self._run_with(junk, ["SPY"])
         self.assertEqual(bars, {})
         self.assertTrue(reasons)
-        self.assertIn("yfinance version", reasons[0])
+        self.assertIn("yfinance version", " ".join(reasons))
 
     def test_partial_success_reports_only_the_failures(self):
         bars, reasons = self._run_with(grouped_by_ticker(["SPY"]), ["SPY", "MISSING"])

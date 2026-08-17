@@ -24,6 +24,7 @@ import pandas as pd
 import yfinance as yf
 
 from app.config import ALL_TICKERS, TICKER_META
+from app.market_data import extract_symbol_frame
 from app.forecast_quant import (
     classify_direction,
     conviction_score,
@@ -54,33 +55,60 @@ def _sigmoid(x: float) -> float:
 
 
 def fetch_bars(tickers: list[str], period: str = HISTORY_PERIOD) -> dict[str, list[dict]]:
-    """Batch-download OHLCV bars for ``tickers``.
+    """Batch-download OHLCV bars for ``tickers``."""
+    bars, _ = fetch_bars_with_reasons(tickers, period=period)
+    return bars
+
+
+def fetch_bars_with_reasons(
+    tickers: list[str], period: str = HISTORY_PERIOD
+) -> tuple[dict[str, list[dict]], list[str]]:
+    """Batch-download OHLCV bars, reporting *why* anything failed.
 
     One `yf.download` call covers the whole list, which matters when the board
     is 15 tickers wide and the alternative is 15 sequential HTTP round trips.
+
+    Returns ``(bars_by_ticker, reasons)``. Failures are collected rather than
+    swallowed: an empty board with no explanation is indistinguishable between a
+    blocked IP, a yfinance version change and a bad ticker list, and those need
+    completely different fixes. Callers surface ``reasons`` to the user.
     """
     if not tickers:
-        return {}
+        return {}, []
 
     unique = sorted(set(tickers))
+    reasons: list[str] = []
+
     try:
         raw = yf.download(
             " ".join(unique), period=period, group_by="ticker",
             progress=False, auto_adjust=False, threads=True,
         )
     except Exception as exc:
-        logger.error("Bar download failed: %s", exc)
-        return {}
+        message = f"Market data download failed: {type(exc).__name__}: {exc}"
+        logger.error(message)
+        return {}, [message]
 
     if raw is None or raw.empty:
-        return {}
+        message = (
+            "Yahoo Finance returned no data for any ticker. This is usually the "
+            "host's IP being blocked or rate-limited rather than a bad ticker — "
+            "open /foresight/api/diagnostics to identify the cause."
+        )
+        logger.error(message)
+        return {}, [message]
 
     out: dict[str, list[dict]] = {}
+    parse_failures = []
     for symbol in unique:
         try:
-            df = raw[symbol] if len(unique) > 1 else raw
+            df = extract_symbol_frame(raw, symbol)
+            if df is None:
+                parse_failures.append(f"{symbol} (not present in response)")
+                continue
             df = df.dropna(subset=["Close", "Open", "High", "Low"])
             if df.empty:
+                parse_failures.append(f"{symbol} (no rows)")
                 continue
             bars = []
             for date, row in df.iterrows():
@@ -94,9 +122,26 @@ def fetch_bars(tickers: list[str], period: str = HISTORY_PERIOD) -> dict[str, li
                 })
             if bars:
                 out[symbol] = bars
-        except (KeyError, ValueError, TypeError):
-            continue
-    return out
+            else:
+                parse_failures.append(f"{symbol} (no usable bars)")
+        except (KeyError, ValueError, TypeError) as exc:
+            parse_failures.append(f"{symbol} ({type(exc).__name__}: {exc})")
+
+    if parse_failures:
+        logger.warning("Could not parse bars for: %s", ", ".join(parse_failures[:10]))
+        # Every ticker failing to parse while the frame itself has data points at
+        # a response-shape change, not at a data outage — call that out.
+        if not out:
+            reasons.append(
+                "Yahoo returned a response but no ticker could be parsed from it, "
+                "which usually means a yfinance version change. Open "
+                "/foresight/api/diagnostics for a precise cause. First failures: "
+                + ", ".join(parse_failures[:5])
+            )
+        else:
+            reasons.append("No data for: " + ", ".join(parse_failures[:10]))
+
+    return out, reasons
 
 
 def _blend(prior, tilt) -> dict:
@@ -171,7 +216,7 @@ def build_forecasts(tickers: list[str], use_catalyst: bool = True,
                     persist: bool = True) -> dict:
     """Run the full pipeline for ``tickers`` and return the published board."""
     started = datetime.now()
-    bars_by_ticker = fetch_bars(tickers)
+    bars_by_ticker, fetch_reasons = fetch_bars_with_reasons(tickers)
 
     priors = []
     skipped = []
@@ -187,12 +232,19 @@ def build_forecasts(tickers: list[str], use_catalyst: bool = True,
         priors.append(prior)
 
     if not priors:
+        # Lead with the fetch-layer reason when there is one: "no market data"
+        # is a symptom, and the cause is what the user needs.
+        detail = fetch_reasons[0] if fetch_reasons else (
+            "No ticker had enough clean history to forecast."
+        )
         return {
             "rows": [],
             "skipped": skipped,
+            "fetch_reasons": fetch_reasons,
             "catalyst_applied": False,
             "generated_at": started.strftime("%Y-%m-%d %H:%M:%S"),
-            "error": "No ticker had enough clean history to forecast.",
+            "error": detail,
+            "diagnostics_url": "/foresight/api/diagnostics",
         }
 
     tilts: dict = {}
@@ -249,6 +301,7 @@ def build_forecasts(tickers: list[str], use_catalyst: bool = True,
     return {
         "rows": rows,
         "skipped": skipped,
+        "fetch_reasons": fetch_reasons,
         "catalyst_applied": bool(tilts),
         "catalyst_available": forecast_catalyst.is_configured(),
         "generated_at": started.strftime("%Y-%m-%d %H:%M:%S"),

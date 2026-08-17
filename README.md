@@ -2,6 +2,45 @@
 
 A full-stack web application that automatically tracks all 36 tickers from the Iran Regime Change Investment Plan. Live prices, auto-refresh, alerts, CSV export, and a production-ready dashboard.
 
+## 🔮 ForesightTape — Next-Session Forecast Engine (`/foresight`)
+
+A probability board for the next trading session, built from two layers:
+
+1. **Quant prior** (`app/forecast_quant.py`) — a Student-t distribution over the next
+   session's return, with volatility from a Yang-Zhang + EWMA blend and a heavily
+   shrunk drift from momentum/trend/reversal signals. Runs from price history alone —
+   no API key required.
+2. **Catalyst overlay** (`app/forecast_catalyst.py`, optional) — Claude researches live
+   catalysts (earnings dates, Fed events, breaking news) via web search and returns a
+   *bounded* tilt on each prior: at most a few probability points of direction and a
+   capped volatility multiplier. Enable it by setting `ANTHROPIC_API_KEY` in the server
+   environment. Without the key the board runs quant-only. The key never reaches the
+   browser.
+
+Every published forecast is stored (`forecasts` table) and graded once its target
+session closes — Brier score, skill vs. coin flip, hit rate and a calibration table
+live on the **Accuracy** tab. The board's honesty is enforced by construction: the
+engine cannot claim more than a modest edge on a daily candle, and "doji" (no edge) is
+a first-class call.
+
+Endpoints: `/foresight/api/market`, `/foresight/api/watchlist?tickers=…`,
+`/foresight/api/scorecard`, `POST /foresight/api/resolve`.
+Tests: `python -m unittest discover -s tests`.
+
+### ⚠️ Keeping the accuracy history
+
+The forecast ledger is only meaningful if it survives redeploys. By default the
+app writes SQLite to `data/tracker.db` — fine locally, but on a host with an
+ephemeral filesystem (including Render's free plan) **every redeploy wipes the
+scorecard and it restarts from zero.** Two ways to keep it:
+
+| Option | Set | Notes |
+|---|---|---|
+| **Postgres** | `DATABASE_URL` | Works on free tiers with no volume. Any Postgres URL — Render, Neon, Supabase. Schema is created automatically on boot. |
+| **Mounted volume** | `DATA_DIR` | Point at a Render disk / Railway volume / Docker `-v` mount, e.g. `DATA_DIR=/var/data`. Render disks need a paid instance type. |
+
+`render.yaml` has both wired up as commented blocks — uncomment whichever you want.
+
 ---
 
 ## 🚀 Deploy in Under 5 Minutes
@@ -161,6 +200,17 @@ iran-tracker-web/
 | `/api/history` | GET | 30-day price history for sparklines (JSON) |
 | `/api/refresh` | POST | Force an immediate data refresh |
 | `/api/download/csv` | GET | Download full snapshot history as CSV |
+
+---
+
+## 🔑 Environment Variables
+
+| Variable | Required | Purpose |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | No | Enables the Claude catalyst overlay on `/foresight`. Unset = quant-only mode. Set it in your host's dashboard — never commit it. |
+| `DATABASE_URL` | No | Postgres connection string. When set, all storage uses Postgres instead of SQLite. |
+| `DATA_DIR` | No | Where SQLite and CSV snapshots are written (default `data`). Point at a mounted volume to persist across redeploys. |
+| `PORT` | No | Port to bind (default `5000`). Most hosts set this for you. |
 
 ---
 

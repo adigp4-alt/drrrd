@@ -68,6 +68,10 @@ Pick any platform below. **Render.com is the easiest** (free tier, no credit car
 
 ---
 
+> 📘 **Step-by-step Render walkthrough: [DEPLOY.md](DEPLOY.md)** — includes
+> setting the Anthropic key and keeping the forecast accuracy history across
+> redeploys.
+
 ### Option 1: Render.com (Recommended — Free)
 
 1. **Create a free account** at [render.com](https://render.com)

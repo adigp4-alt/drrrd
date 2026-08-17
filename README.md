@@ -23,9 +23,28 @@ live on the **Accuracy** tab. The board's honesty is enforced by construction: t
 engine cannot claim more than a modest edge on a daily candle, and "doji" (no edge) is
 a first-class call.
 
+### Does it actually work? Run the backtest
+
+The **Accuracy** tab has a *Run backtest* button that replays the quant engine
+forward through history — each session forecast using only the bars that existed
+at the time — so you get a real skill estimate immediately instead of waiting
+weeks for the live ledger to fill. It reports Brier score and skill against two
+baselines:
+
+- **Coin flip** (always 50/50) — the skill score is measured against this.
+- **Always up** — equities drift upward, so a model that blindly says "up" every
+  session already posts a hit rate above 50%. An engine that can't beat this
+  has a directional hit rate that is noise, not insight.
+
+The catalyst overlay is excluded from backtests: past web research can't be
+reconstructed without leaking the outcome. Backtest results are deliberately
+**not** written to the ledger, so simulated history never inflates the live
+track record.
+
 Endpoints: `/foresight/api/market`, `/foresight/api/watchlist?tickers=…`,
-`/foresight/api/scorecard`, `POST /foresight/api/resolve`.
-Tests: `python -m unittest discover -s tests`.
+`/foresight/api/scorecard`, `/foresight/api/backtest`,
+`POST /foresight/api/resolve`.
+Tests: `python -m unittest discover -s tests` (91 tests).
 
 ### ⚠️ Keeping the accuracy history
 

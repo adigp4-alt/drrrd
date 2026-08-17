@@ -120,6 +120,27 @@ th.sortable:hover { color: #F8FAFC; }
 
 <!-- ACCURACY -->
 <div id="view-score" class="ft-view d-none">
+    <div class="card mb-3"><div class="card-body">
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+            <div>
+                <div class="fw-semibold mb-1">Historical backtest</div>
+                <div class="ft-small ft-muted" style="max-width:640px">
+                    Replays the quant engine forward through history — each session
+                    forecast using only the bars available at the time — so you get a
+                    real skill estimate now instead of waiting weeks for the live
+                    ledger to fill. The catalyst overlay is excluded: past web
+                    research can't be reconstructed without leaking the outcome.
+                </div>
+            </div>
+            <button id="btBtn" class="btn btn-outline-secondary btn-sm px-3">
+                <i class="fa-solid fa-clock-rotate-left me-1"></i> Run backtest
+            </button>
+        </div>
+        <div id="btStatus" class="ft-small mt-3 d-none"></div>
+        <div id="btResults" class="d-none mt-3"></div>
+    </div></div>
+
+    <div class="ft-small ft-muted mb-2 text-uppercase" style="letter-spacing:1px">Live forecast ledger</div>
     <div class="row g-3 mb-3" id="scoreCards"></div>
     <div class="row g-3">
         <div class="col-lg-5">
@@ -348,6 +369,103 @@ async function loadScorecard() {
     }
 }
 
+// ---------- backtest ----------
+function verdict(s) {
+    const b = s.baselines || {};
+    const skill = s.brier_skill_score;
+    if (!b.beats_coin_flip)
+        return { cls: "danger", text: "No measurable edge — the engine did not beat a coin flip over this sample." };
+    if (!b.beats_always_up)
+        return { cls: "warning", text: "Beats a coin flip but not a naive always-up caller, which equity drift alone rewards. Treat the directional calls as weak." };
+    if (skill < 0.01)
+        return { cls: "warning", text: "Positive but very small edge — consistent with a next-session forecast being mostly noise." };
+    return { cls: "success", text: "Beats both a coin flip and a naive always-up caller over this sample." };
+}
+
+function renderBacktest(s) {
+    if (!s.predictions) {
+        $("btResults").innerHTML = `<div class="ft-muted ft-small">${esc(s.message || "No predictions produced.")}</div>`;
+        $("btResults").classList.remove("d-none");
+        return;
+    }
+    const v = verdict(s);
+    const b = s.baselines || {};
+    const card = (label, value, hint) => `<div class="col-6 col-lg-3">
+        <div class="card stat-card h-100" title="${esc(hint)}">
+            <div class="value" style="font-size:1.6rem">${value}</div>
+            <div class="label">${label}</div></div></div>`;
+
+    $("btResults").innerHTML = `
+      <div class="alert alert-${v.cls} ft-small py-2">${esc(v.text)}</div>
+      <div class="row g-2 mb-3">
+        ${card("Predictions", s.predictions.toLocaleString(),
+               `${s.tickers_tested} tickers, ${s.date_range.start} → ${s.date_range.end}`)}
+        ${card("Brier score", s.brier.toFixed(4), "Lower is better; 0.25 = coin flip")}
+        ${card("Skill vs coin flip",
+               `<span class="${s.brier_skill_score > 0 ? "text-success" : "text-danger"}">${(s.brier_skill_score * 100).toFixed(2)}%</span>`,
+               "1 − Brier/0.25. Positive means better than always saying 50/50")}
+        ${card("Hit rate", s.hit_rate == null ? "—" : (s.hit_rate * 100).toFixed(1) + "%",
+               `${s.directional_calls} directional calls; ${s.doji_calls} dojis excluded`)}
+      </div>
+      <div class="row g-3">
+        <div class="col-lg-6"><div class="card h-100">
+          <div class="card-header ft-small">Versus baselines</div>
+          <table class="table table-dark ft-table mb-0"><tbody>
+            <tr><td>Engine Brier</td><td class="text-end ft-mono">${s.brier.toFixed(4)}</td></tr>
+            <tr><td>Coin flip (always 0.50)</td><td class="text-end ft-mono">${b.coin_flip_brier.toFixed(4)}</td></tr>
+            <tr><td>Always up</td><td class="text-end ft-mono">${b.always_up_brier.toFixed(4)}</td></tr>
+            <tr><td class="ft-muted">Sessions that closed up</td><td class="text-end ft-mono ft-muted">${(s.realized_up_rate * 100).toFixed(1)}%</td></tr>
+            <tr><td class="ft-muted">Mean forecast P(up)</td><td class="text-end ft-mono ft-muted">${(s.mean_forecast_p_up * 100).toFixed(1)}%</td></tr>
+          </tbody></table></div></div>
+        <div class="col-lg-6"><div class="card h-100">
+          <div class="card-header ft-small">Calibration — forecast vs. reality</div>
+          <table class="table table-dark ft-table mb-0">
+            <thead><tr><th>Forecast</th><th class="text-end">N</th><th class="text-end">Realized</th></tr></thead>
+            <tbody>${(s.calibration || []).map((c) => `<tr>
+              <td class="ft-mono">${c.range}</td>
+              <td class="text-end">${c.count.toLocaleString()}</td>
+              <td class="text-end ft-mono">${(c.realized_up_rate * 100).toFixed(1)}%</td></tr>`).join("")}
+            </tbody></table></div></div>
+        <div class="col-lg-6"><div class="card h-100">
+          <div class="card-header ft-small">By volatility regime</div>
+          <table class="table table-dark ft-table mb-0">
+            <thead><tr><th>Regime</th><th class="text-end">N</th><th class="text-end">Skill</th></tr></thead>
+            <tbody>${(s.by_regime || []).map((r) => `<tr>
+              <td>${esc(r.regime)}</td><td class="text-end">${r.count.toLocaleString()}</td>
+              <td class="text-end ft-mono ${r.brier_skill_score > 0 ? "text-success" : "text-danger"}">${(r.brier_skill_score * 100).toFixed(2)}%</td></tr>`).join("")}
+            </tbody></table></div></div>
+        <div class="col-lg-6"><div class="card h-100">
+          <div class="card-header ft-small">Best and worst tickers</div>
+          <table class="table table-dark ft-table mb-0">
+            <thead><tr><th>Ticker</th><th class="text-end">N</th><th class="text-end">Skill</th></tr></thead>
+            <tbody>${(s.by_ticker || []).slice(0, 5).concat((s.by_ticker || []).slice(-3))
+              .filter((r, i, a) => a.findIndex((x) => x.ticker === r.ticker) === i)
+              .map((r) => `<tr><td class="ft-mono">${esc(r.ticker)}</td>
+              <td class="text-end">${r.count.toLocaleString()}</td>
+              <td class="text-end ft-mono ${r.brier_skill_score > 0 ? "text-success" : "text-danger"}">${(r.brier_skill_score * 100).toFixed(2)}%</td></tr>`).join("")}
+            </tbody></table></div></div>
+      </div>`;
+    $("btResults").classList.remove("d-none");
+}
+
+async function runBacktest() {
+    const btn = $("btBtn");
+    btn.disabled = true;
+    $("btStatus").className = "ft-small mt-3 text-info";
+    $("btStatus").innerHTML =
+        `<span class="spinner-border spinner-border-sm me-2"></span>Replaying history across every tracked ticker — this takes a moment…`;
+    $("btStatus").classList.remove("d-none");
+    try {
+        const data = await getJSON("/foresight/api/backtest");
+        renderBacktest(data);
+        $("btStatus").classList.add("d-none");
+    } catch (e) {
+        $("btStatus").className = "ft-small mt-3 text-danger";
+        $("btStatus").textContent = `Backtest failed: ${e.message}`;
+    }
+    btn.disabled = false;
+}
+
 // ---------- actions ----------
 function setLoading(on, label) {
     state.loading = on;
@@ -420,6 +538,7 @@ document.querySelectorAll("#ftTabs .nav-link").forEach((btn) => btn.onclick = ()
 
 $("scanBtn").onclick = scanMarket;
 $("wlBtn").onclick = scanWatchlist;
+$("btBtn").onclick = runBacktest;
 $("wlInput").addEventListener("keydown", (e) => { if (e.key === "Enter") scanWatchlist(); });
 
 // Restore the last scan within this browser session so tab switches are free.

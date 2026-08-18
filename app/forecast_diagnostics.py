@@ -19,8 +19,10 @@ cause is identified rather than guessed at.
 from __future__ import annotations
 
 import logging
+import os
 import platform
 import socket
+import subprocess
 import time
 
 from app import market_data
@@ -43,6 +45,40 @@ def _versions() -> dict:
         except Exception:
             out[name] = "not installed"
     return out
+
+
+def _deployment() -> dict:
+    """Identify which build is actually running.
+
+    "I redeployed and it still doesn't work" has two very different meanings —
+    the fix didn't work, or the fix isn't there — and from outside they look the
+    same. This makes the running build say what it is.
+
+    ``providers`` is the useful part: it lists the price sources *this build*
+    knows about. A build predating the multi-provider chain reports only the
+    ones it has, which identifies a stale deploy immediately.
+    """
+    from app import forecast_engine
+
+    info = {
+        # Render injects these; other hosts generally don't.
+        "commit": os.environ.get("RENDER_GIT_COMMIT", ""),
+        "branch": os.environ.get("RENDER_GIT_BRANCH", ""),
+        "service": os.environ.get("RENDER_SERVICE_NAME", ""),
+        "source_mode": market_data.SOURCE_MODE,
+        "providers": list(getattr(forecast_engine, "_PROVIDERS", {})),
+    }
+    if not info["commit"]:
+        # Local runs: read it from git rather than leaving the field blank.
+        try:
+            info["commit"] = subprocess.run(
+                ["git", "rev-parse", "--short", "HEAD"],
+                capture_output=True, text=True, timeout=5,
+                cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            ).stdout.strip()
+        except Exception:
+            pass
+    return {k: v for k, v in info.items() if v}
 
 
 def _dns_probe() -> dict:
@@ -292,8 +328,8 @@ def run_diagnostics() -> dict:
 
     return {
         "verdict": verdict,
+        "deployment": _deployment(),
         "versions": _versions(),
-        "source_mode": market_data.SOURCE_MODE,
         "probes": {
             "dns": dns,
             "https_direct": https,

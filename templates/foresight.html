@@ -475,6 +475,28 @@ function renderBoard() {
 }
 
 // ---------- diagnostics ----------
+
+// "I redeployed and it still doesn't work" is ambiguous between "the fix
+// failed" and "the fix isn't running". A build that predates the multi-provider
+// chain is missing "chart" from its provider list, which says so outright.
+function buildLine(dep) {
+  const provs = dep.providers || [];
+  const parts = [];
+  if (dep.commit) parts.push(`build ${dep.commit}`);
+  if (dep.branch) parts.push(`branch ${dep.branch}`);
+  if (provs.length) parts.push(`providers: ${provs.join(", ")}`);
+  if (dep.source_mode && dep.source_mode !== "auto")
+    parts.push(`MARKET_DATA_SOURCE=${dep.source_mode}`);
+  if (!parts.length) return "";
+
+  const stale = provs.length > 0 && !provs.includes("chart");
+  return `<div class="ft-sub" style="margin-top:.5rem;opacity:.75">${esc(parts.join(" · "))}</div>`
+    + (stale ? `<div class="ft-sub" style="margin-top:.35rem;color:var(--ft-bear)">
+         <b>This build is out of date.</b> It predates the direct Yahoo chart
+         provider, so a redeploy has not picked up the current code — check
+         which branch the host is deploying from.</div>` : "");
+}
+
 async function runDiagnostics() {
   const out = $("diagOut");
   if (!out) return;
@@ -499,6 +521,7 @@ async function runDiagnostics() {
       </tbody></table>
       <div class="ft-sub" style="margin-top:.5rem">Only one provider needs to
         work — a failed row is not necessarily the problem.</div>
+      ${buildLine(d.deployment || {})}
       <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.75rem">
         <button id="diagCopy" class="ft-btn ft-btn-ghost">Copy report</button>
         <button id="diagRetry" class="ft-btn ft-btn-ghost">Retry scan</button>

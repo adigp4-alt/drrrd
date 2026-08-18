@@ -88,6 +88,12 @@ databases:
 
 ## Step 4 — First run
 
+> **Check which branch you deployed first.** This repository's default branch
+> is where the forecast app lives; `main` is a different line of development and
+> does **not** contain `/foresight` at all. In the Render dashboard this is
+> Settings → Build & Deploy → Branch. Deploying the wrong one gives you an app
+> with no forecast board rather than a broken one.
+
 Open `/foresight` and:
 
 1. Click **Scan market** — the first real test of the live market-data path.
@@ -105,7 +111,9 @@ Open `/foresight` and:
 | Symptom | Cause and fix |
 |---|---|
 | First visit hangs ~30s | Free-plan cold start. Normal. |
+| `/foresight` returns 404 | You deployed `main`, which has no forecast board. Switch the branch — see Step 4. |
 | Board is empty after a scan | All three price providers failed. Open `/foresight/api/diagnostics` on the deployed URL — it probes each layer and names the cause. Yahoo throttles datacenter IPs hard, so `MARKET_DATA_SOURCE=stooq` is the usual workaround on a cloud host. |
+| Redeployed and nothing changed | The diagnostics panel prints the running build's commit and its provider list. If `chart` is missing from that list, the redeploy did not pick up current code and the branch is the thing to check. |
 | **quant-only mode** badge | `ANTHROPIC_API_KEY` is not set — see Step 2. |
 | Accuracy tab empty after redeploy | Storage is ephemeral — see Step 3. |
 | Scan times out | Gunicorn's timeout is already raised to 300s in `render.yaml`. If you changed the start command, put `--timeout 300` back; catalyst scans run web research and exceed the 30s default. |

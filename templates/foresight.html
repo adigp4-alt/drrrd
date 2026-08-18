@@ -4,8 +4,12 @@
 {% block head %}
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0B0F19">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Foresight">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
 {% endblock %}
 
 {% block style %}
@@ -46,6 +50,10 @@
 
 .ft { max-width: 1120px; margin: 0 auto; padding-bottom: 5.5rem; }
 .ft *, .ft *::before, .ft *::after { box-sizing: border-box; }
+/* An explicit `display` in an author rule outranks the UA sheet's
+   `[hidden] { display: none }`, so anything using [hidden] to toggle needs
+   this or it stays visible (e.g. the sort row, which is display:flex). */
+.ft [hidden] { display: none !important; }
 
 /* Tabular figures everywhere numbers are compared down a column. */
 .ft-num {
@@ -239,9 +247,17 @@
         quant-only
       </span>
       {% endif %}
+      <button id="installBtn" class="ft-btn ft-btn-ghost" hidden>Install app</button>
       <button id="scanBtn" class="ft-btn">Scan market</button>
     </div>
   </header>
+
+  <div id="iosHint" class="ft-status ft-status-info" hidden>
+    <b>Add to Home Screen</b> — tap the Share button below, then
+    <b>Add to Home Screen</b>. Foresight then opens full-screen, like an app.
+    <button id="iosHintClose" class="ft-btn ft-btn-ghost"
+            style="min-height:32px;padding:0 .8rem;margin-left:.5rem">Got it</button>
+  </div>
 
   <div id="tapeWrap" class="ft-tape" hidden><div id="tape" class="ft-tape-track"></div></div>
   <div id="statusBar" hidden></div>
@@ -693,6 +709,64 @@ try {
   $("wlInput").value = sessionStorage.getItem("ft-watch-input") || "";
 } catch { /* cold start */ }
 renderBoard();
+
+// ---------- installable app ----------
+// The worker is served from the root so its scope covers the whole app; a
+// worker delivered from /static/ could only control /static/.
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js", { scope: "/" })
+      .catch((e) => console.warn("Service worker registration failed:", e));
+  });
+}
+
+// Chrome/Edge/Android: capture the install prompt and offer it on our own button.
+let deferredPrompt = null;
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  $("installBtn").hidden = false;
+});
+$("installBtn").onclick = async () => {
+  if (!deferredPrompt) return;
+  deferredPrompt.prompt();
+  await deferredPrompt.userChoice;
+  deferredPrompt = null;
+  $("installBtn").hidden = true;
+};
+window.addEventListener("appinstalled", () => { $("installBtn").hidden = true; });
+
+// iOS has no install prompt API — Safari requires the Share menu — so show the
+// instructions instead, once, and only when not already running standalone.
+const standalone = window.matchMedia("(display-mode: standalone)").matches
+  || window.navigator.standalone === true;
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+if (isIOS && !standalone && !localStorage.getItem("ft-ios-hint-dismissed")) {
+  $("iosHint").hidden = false;
+  $("iosHintClose").onclick = () => {
+    $("iosHint").hidden = true;
+    localStorage.setItem("ft-ios-hint-dismissed", "1");
+  };
+}
+
+// Offline banner: a stale board shown as if it were live would be worse than
+// no board at all, so say plainly when the network is gone.
+function connectivity() {
+  if (!navigator.onLine) {
+    status("<b>Offline.</b> Showing the last saved board — these figures are not live.", "err");
+  }
+}
+window.addEventListener("offline", connectivity);
+window.addEventListener("online", () => status(null));
+connectivity();
+
+// Deep links from the manifest shortcuts.
+const params = new URLSearchParams(location.search);
+if (params.get("tab")) {
+  const t = document.querySelector(`.ft-tabs .ft-tab[data-view="${params.get("tab")}"]`);
+  if (t) t.click();
+}
+if (params.get("action") === "scan") scanMarket();
 })();
 </script>
 {% endblock %}

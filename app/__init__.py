@@ -18,7 +18,8 @@ def create_app():
     init_db()
 
     # Register blueprints
-    from app.routes import dashboard, portfolio, analysis, alerts_api, watchlist, export, screener, backtest, stat_arb, forecast
+    from app.routes import dashboard, portfolio, analysis, alerts_api, watchlist, export, screener, backtest, stat_arb, forecast, pwa
+    app.register_blueprint(pwa.bp)
     app.register_blueprint(forecast.bp)
     app.register_blueprint(dashboard.bp)
     app.register_blueprint(portfolio.bp)

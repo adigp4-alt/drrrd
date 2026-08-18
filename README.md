@@ -2,6 +2,88 @@
 
 A full-stack web application that automatically tracks all 36 tickers from the Iran Regime Change Investment Plan. Live prices, auto-refresh, alerts, CSV export, and a production-ready dashboard.
 
+## 🔮 ForesightTape — Next-Session Forecast Engine (`/foresight`)
+
+A probability board for the next trading session, built from two layers:
+
+1. **Quant prior** (`app/forecast_quant.py`) — a Student-t distribution over the next
+   session's return, with volatility from a Yang-Zhang + EWMA blend and a heavily
+   shrunk drift from momentum/trend/reversal signals. Runs from price history alone —
+   no API key required.
+2. **Catalyst overlay** (`app/forecast_catalyst.py`, optional) — Claude researches live
+   catalysts (earnings dates, Fed events, breaking news) via web search and returns a
+   *bounded* tilt on each prior: at most a few probability points of direction and a
+   capped volatility multiplier. Enable it by setting `ANTHROPIC_API_KEY` in the server
+   environment. Without the key the board runs quant-only. The key never reaches the
+   browser.
+
+Every published forecast is stored (`forecasts` table) and graded once its target
+session closes — Brier score, skill vs. coin flip, hit rate and a calibration table
+live on the **Accuracy** tab. The board's honesty is enforced by construction: the
+engine cannot claim more than a modest edge on a daily candle, and "doji" (no edge) is
+a first-class call.
+
+### Does it actually work? Run the backtest
+
+The **Accuracy** tab has a *Run backtest* button that replays the quant engine
+forward through history — each session forecast using only the bars that existed
+at the time — so you get a real skill estimate immediately instead of waiting
+weeks for the live ledger to fill. It reports Brier score and skill against two
+baselines:
+
+- **Coin flip** (always 50/50) — the skill score is measured against this.
+- **Always up** — equities drift upward, so a model that blindly says "up" every
+  session already posts a hit rate above 50%. An engine that can't beat this
+  has a directional hit rate that is noise, not insight.
+
+The catalyst overlay is excluded from backtests: past web research can't be
+reconstructed without leaking the outcome. Backtest results are deliberately
+**not** written to the ledger, so simulated history never inflates the live
+track record.
+
+Endpoints: `/foresight/api/market`, `/foresight/api/watchlist?tickers=…`,
+`/foresight/api/scorecard`, `/foresight/api/backtest`,
+`POST /foresight/api/resolve`.
+Tests: `python -m unittest discover -s tests`.
+
+### Where the prices come from
+
+Three independent providers, tried in order, each asked only for the tickers the
+previous one could not supply:
+
+1. **Yahoo's chart API, called directly** — plain HTTPS against
+   `v8/finance/chart`, no library in the way. Chart data needs no cookie/crumb
+   handshake, so this path is immune both to Yahoo changing that handshake and
+   to yfinance changing its response shape.
+2. **yfinance** — kept as a second path for its own retry and session handling.
+3. **Stooq** — a different origin entirely, for when Yahoo refuses the host
+   outright (it throttles datacenter IP ranges hard, which is what makes a
+   cloud-deployed board go blank).
+
+The board reports which provider served the data whenever it isn't the first, so
+a degraded path is visible rather than silent. Historically the app depended on
+yfinance alone, and every blank board traced back to that.
+
+**Board empty?** Run `python diagnose.py` — a standalone report that runs each
+provider separately and separates a blocked IP, a rate limit, a yfinance/API
+mismatch and a network problem. It also captures yfinance's own log, since it
+reports most failures by logging them and returning an empty frame, leaving the
+app with "no data" and no exception.
+
+### ⚠️ Keeping the accuracy history
+
+The forecast ledger is only meaningful if it survives redeploys. By default the
+app writes SQLite to `data/tracker.db` — fine locally, but on a host with an
+ephemeral filesystem (including Render's free plan) **every redeploy wipes the
+scorecard and it restarts from zero.** Two ways to keep it:
+
+| Option | Set | Notes |
+|---|---|---|
+| **Postgres** | `DATABASE_URL` | Works on free tiers with no volume. Any Postgres URL — Render, Neon, Supabase. Schema is created automatically on boot. |
+| **Mounted volume** | `DATA_DIR` | Point at a Render disk / Railway volume / Docker `-v` mount, e.g. `DATA_DIR=/var/data`. Render disks need a paid instance type. |
+
+`render.yaml` has both wired up as commented blocks — uncomment whichever you want.
+
 ---
 
 ## 🚀 Deploy in Under 5 Minutes
@@ -9,6 +91,13 @@ A full-stack web application that automatically tracks all 36 tickers from the I
 Pick any platform below. **Render.com is the easiest** (free tier, no credit card).
 
 ---
+
+> 📘 **Deploying to Render: [DEPLOY.md](DEPLOY.md)** — includes setting the
+> Anthropic key and keeping the forecast accuracy history across redeploys.
+>
+> 💻 **Running it from your own laptop: [LAPTOP.md](LAPTOP.md)** — no hosting
+> needed, and it sidesteps the Yahoo Finance datacenter-IP blocking that can
+> leave a cloud-hosted board empty.
 
 ### Option 1: Render.com (Recommended — Free)
 
@@ -161,6 +250,18 @@ iran-tracker-web/
 | `/api/history` | GET | 30-day price history for sparklines (JSON) |
 | `/api/refresh` | POST | Force an immediate data refresh |
 | `/api/download/csv` | GET | Download full snapshot history as CSV |
+
+---
+
+## 🔑 Environment Variables
+
+| Variable | Required | Purpose |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | No | Enables the Claude catalyst overlay on `/foresight`. Unset = quant-only mode. Set it in your host's dashboard — never commit it. |
+| `DATABASE_URL` | No | Postgres connection string. When set, all storage uses Postgres instead of SQLite. |
+| `DATA_DIR` | No | Where SQLite and CSV snapshots are written (default `data`). Point at a mounted volume to persist across redeploys. |
+| `MARKET_DATA_SOURCE` | No | Which price providers to use, in order. `auto` (default) = Yahoo chart API → yfinance → Stooq, each asked only for what the previous one missed. `yahoo` drops Stooq; `stooq`, `chart` and `yfinance` each force a single provider (useful for isolating a fault). |
+| `PORT` | No | Port to bind (default `5000`). Most hosts set this for you. |
 
 ---
 

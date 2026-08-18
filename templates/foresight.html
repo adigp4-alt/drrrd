@@ -1,0 +1,779 @@
+{% extends "base.html" %}
+{% block title %}ForesightTape — Next-Session Forecasts{% endblock %}
+
+{% block head %}
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0B0F19">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Foresight">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+{% endblock %}
+
+{% block style %}
+/* ===================================================================
+   ForesightTape — mobile-first forecast board
+
+   Colour: bull / bear are a *diverging* pair, not decoration. The obvious
+   green/red fails deuteranopia separation (OKLab CVD dE 5.6 — roughly 8% of
+   men could not tell the two tiles apart), so the poles are the validated
+   aqua/orange pair (dE 9.4 deutan, 26.5 normal-vision, both >= 3:1 on this
+   surface). Doji is the neutral midpoint and is legitimately grey.
+   Direction is never carried by colour alone: every state also ships an
+   arrow glyph and a written label.
+   =================================================================== */
+:root {
+  --ft-bull:        #199e70;
+  --ft-bull-soft:   rgba(25, 158, 112, 0.16);
+  --ft-bull-line:   rgba(25, 158, 112, 0.42);
+  --ft-bear:        #d95926;
+  --ft-bear-soft:   rgba(217, 89, 38, 0.16);
+  --ft-bear-line:   rgba(217, 89, 38, 0.42);
+  --ft-doji:        #9a9a94;
+  --ft-doji-soft:   rgba(154, 154, 148, 0.12);
+  --ft-doji-line:   rgba(154, 154, 148, 0.30);
+
+  --ft-surface:     rgba(255, 255, 255, 0.035);
+  --ft-surface-2:   rgba(255, 255, 255, 0.06);
+  --ft-line:        rgba(255, 255, 255, 0.09);
+  --ft-ink:         #F5F7FA;
+  --ft-ink-2:       #A8B0BD;
+  --ft-ink-3:       #6E7683;
+  --ft-accent:      #7C8CFF;
+
+  --ft-r:           16px;
+  --ft-r-sm:        10px;
+  --ft-tap:         44px;   /* minimum comfortable touch target */
+}
+
+.ft { max-width: 1120px; margin: 0 auto; padding-bottom: 5.5rem; }
+.ft *, .ft *::before, .ft *::after { box-sizing: border-box; }
+/* An explicit `display` in an author rule outranks the UA sheet's
+   `[hidden] { display: none }`, so anything using [hidden] to toggle needs
+   this or it stays visible (e.g. the sort row, which is display:flex). */
+.ft [hidden] { display: none !important; }
+
+/* Tabular figures everywhere numbers are compared down a column. */
+.ft-num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  letter-spacing: -0.01em;
+}
+
+/* ---------- header ---------- */
+.ft-head { display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
+.ft-title { font-size: clamp(1.5rem, 5vw, 2rem); font-weight: 700;
+  letter-spacing: -0.03em; margin: 0; line-height: 1.1; }
+.ft-title span { background: linear-gradient(120deg, #7C8CFF, #C4A2FF);
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+.ft-sub { color: var(--ft-ink-2); font-size: 0.875rem; line-height: 1.5;
+  margin: 0.4rem 0 0; max-width: 58ch; }
+
+/* ---------- ticker tape ---------- */
+.ft-tape { overflow: hidden; white-space: nowrap; border: 1px solid var(--ft-line);
+  border-radius: var(--ft-r-sm); background: rgba(0,0,0,0.28); margin-bottom: 1.25rem;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent); }
+.ft-tape-track { display: inline-block; padding: 0.5rem 0; animation: ft-scroll 48s linear infinite; }
+.ft-tape:hover .ft-tape-track, .ft-tape:focus-within .ft-tape-track { animation-play-state: paused; }
+@keyframes ft-scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+@media (prefers-reduced-motion: reduce) {
+  .ft-tape-track { animation: none; }
+  .ft-tape { overflow-x: auto; }
+}
+.ft-chip { display: inline-flex; align-items: baseline; gap: 0.4rem; padding: 0 0.9rem;
+  font-size: 0.8rem; }
+.ft-chip b { font-weight: 650; color: var(--ft-ink); }
+
+/* ---------- controls ---------- */
+.ft-actions { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
+.ft-btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+  min-height: var(--ft-tap); padding: 0 1.15rem; border-radius: 999px; border: 1px solid transparent;
+  font-size: 0.9rem; font-weight: 600; cursor: pointer; transition: transform .15s, filter .15s;
+  background: linear-gradient(135deg, #5B6BFF, #8B5CF6); color: #fff; }
+.ft-btn:hover:not(:disabled) { filter: brightness(1.1); transform: translateY(-1px); }
+.ft-btn:active:not(:disabled) { transform: translateY(0); }
+.ft-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.ft-btn-ghost { background: var(--ft-surface-2); color: var(--ft-ink); border-color: var(--ft-line); }
+.ft-btn-ghost:hover:not(:disabled) { background: rgba(255,255,255,0.1); filter: none; }
+.ft-switch { display: inline-flex; align-items: center; gap: 0.5rem; min-height: var(--ft-tap);
+  color: var(--ft-ink-2); font-size: 0.85rem; cursor: pointer; user-select: none; }
+.ft-switch input { width: 2.4rem; height: 1.4rem; accent-color: var(--ft-accent); cursor: pointer; }
+
+/* ---------- cards ---------- */
+.ft-card { background: var(--ft-surface); border: 1px solid var(--ft-line);
+  border-radius: var(--ft-r); padding: 1.1rem; }
+.ft-card + .ft-card { margin-top: 0.85rem; }
+.ft-empty { text-align: center; color: var(--ft-ink-2); padding: 2.75rem 1.25rem;
+  border: 1px dashed var(--ft-line); border-radius: var(--ft-r); font-size: 0.9rem; line-height: 1.6; }
+
+/* ---------- forecast row (works as a list at every width) ---------- */
+.ft-rows { display: flex; flex-direction: column; gap: 0.5rem; }
+.ft-row { display: grid; gap: 0.15rem 0.9rem; align-items: center; padding: 0.85rem 0.95rem;
+  background: var(--ft-surface); border: 1px solid var(--ft-line); border-left-width: 3px;
+  border-radius: var(--ft-r-sm); transition: background .15s;
+  grid-template-columns: 1fr auto; grid-template-areas: "id move" "bar bar" "why why"; }
+.ft-row:hover { background: var(--ft-surface-2); }
+.ft-row[data-dir="bull"] { border-left-color: var(--ft-bull-line); }
+.ft-row[data-dir="bear"] { border-left-color: var(--ft-bear-line); }
+.ft-row[data-dir="doji"] { border-left-color: var(--ft-doji-line); }
+
+.ft-id { grid-area: id; min-width: 0; }
+.ft-tick { font-weight: 700; font-size: 1rem; letter-spacing: -0.01em; }
+.ft-name { color: var(--ft-ink-3); font-size: 0.75rem; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+.ft-move { grid-area: move; text-align: right; }
+.ft-move-v { font-size: 1.05rem; font-weight: 700; }
+.ft-move-s { color: var(--ft-ink-3); font-size: 0.7rem; }
+.ft-why { grid-area: why; color: var(--ft-ink-2); font-size: 0.78rem; line-height: 1.45;
+  margin-top: 0.35rem; }
+
+/* Diverging probability bar, anchored at the 50% coin-flip midpoint. The
+   distance from centre *is* the claimed edge, so a near-flat bar reads as
+   "no edge" at a glance rather than needing the number parsed. */
+.ft-bar { grid-area: bar; position: relative; height: 8px; border-radius: 4px;
+  background: var(--ft-doji-soft); margin-top: 0.55rem;
+  /* Guides at 40 / 60% give the eye a scale, so a short fill reads as
+     "small edge" rather than "small bar". */
+  background-image: linear-gradient(90deg, transparent calc(40% - 1px),
+    rgba(255,255,255,0.10) calc(40% - 1px), rgba(255,255,255,0.10) 40%,
+    transparent 40%, transparent calc(60% - 1px),
+    rgba(255,255,255,0.10) calc(60% - 1px), rgba(255,255,255,0.10) 60%, transparent 60%); }
+.ft-bar i { position: absolute; top: 0; bottom: 0; display: block; border-radius: 3px;
+  min-width: 3px; }
+.ft-bar::after { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px;
+  width: 1px; background: rgba(255,255,255,0.45); }
+
+.ft-badge { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.15rem 0.5rem;
+  border-radius: 6px; font-size: 0.68rem; font-weight: 650; letter-spacing: 0.02em; }
+.ft-b-bull { background: var(--ft-bull-soft); color: var(--ft-bull); }
+.ft-b-bear { background: var(--ft-bear-soft); color: var(--ft-bear); }
+.ft-b-doji { background: var(--ft-doji-soft); color: var(--ft-doji); }
+
+@media (min-width: 720px) {
+  .ft-row { grid-template-columns: 13rem minmax(0, 26rem) 1fr;
+    grid-template-areas: "id bar move" "why why why"; gap: 0.3rem 1.25rem; }
+  .ft-bar { margin-top: 0; }
+  .ft-move { text-align: left; }
+  .ft-why { margin-top: 0.5rem; }
+  /* Only the primary tab bar stretches; sort chips size to their labels. */
+  .ft-tabs { max-width: 34rem; }
+  #boardSort .ft-tab { flex: 0 0 auto; }
+}
+#boardSort .ft-tab { flex: 0 0 auto; }
+
+/* ---------- heatmap ---------- */
+.ft-grid { display: grid; gap: 0.5rem; grid-template-columns: repeat(2, 1fr); }
+@media (min-width: 560px) { .ft-grid { grid-template-columns: repeat(3, 1fr); } }
+@media (min-width: 860px) { .ft-grid { grid-template-columns: repeat(4, 1fr); } }
+.ft-tile { border-radius: var(--ft-r-sm); padding: 0.8rem; border: 1px solid var(--ft-line);
+  min-height: 92px; display: flex; flex-direction: column; justify-content: space-between; }
+.ft-tile-top { display: flex; align-items: baseline; justify-content: space-between; gap: 0.4rem; }
+
+/* ---------- stat tiles ---------- */
+.ft-stats { display: grid; gap: 0.6rem; grid-template-columns: repeat(2, 1fr); }
+@media (min-width: 700px) { .ft-stats { grid-template-columns: repeat(4, 1fr); } }
+.ft-stat { background: var(--ft-surface); border: 1px solid var(--ft-line);
+  border-radius: var(--ft-r-sm); padding: 0.9rem; }
+.ft-stat-v { font-size: clamp(1.35rem, 5vw, 1.75rem); font-weight: 700; letter-spacing: -0.02em; }
+.ft-stat-l { color: var(--ft-ink-3); font-size: 0.7rem; text-transform: uppercase;
+  letter-spacing: 0.06em; font-weight: 600; margin-top: 0.15rem; }
+
+/* ---------- tabs: top on desktop, thumb-reachable bar on phones ---------- */
+.ft-tabs { display: flex; gap: 0.25rem; padding: 0.25rem; background: var(--ft-surface);
+  border: 1px solid var(--ft-line); border-radius: 999px; margin-bottom: 1.1rem;
+  overflow-x: auto; scrollbar-width: none; }
+.ft-tabs::-webkit-scrollbar { display: none; }
+.ft-tab { flex: 1 0 auto; min-height: 38px; padding: 0 1rem; border: 0; border-radius: 999px;
+  background: transparent; color: var(--ft-ink-2); font-size: 0.85rem; font-weight: 600;
+  cursor: pointer; white-space: nowrap; transition: background .15s, color .15s; }
+.ft-tab[aria-selected="true"] { background: var(--ft-surface-2); color: var(--ft-ink); }
+
+@media (max-width: 719px) {
+  /* Sits directly above the app-wide tab bar, which owns the safe-area inset. */
+  .ft-tabs { position: fixed; left: 0; right: 0; z-index: 1030; margin: 0;
+    bottom: calc(var(--ios-tabbar-h, 0px) + env(safe-area-inset-bottom));
+    border-radius: 0; border-width: 1px 0 0; padding: 0.3rem 0.4rem;
+    background: rgba(11, 15, 25, 0.94); backdrop-filter: blur(16px); }
+  .ft-tab { min-height: var(--ft-tap); font-size: 0.78rem; padding: 0 0.5rem; }
+}
+
+.ft-status { border-radius: var(--ft-r-sm); padding: 0.85rem 1rem; font-size: 0.85rem;
+  line-height: 1.55; margin-bottom: 1rem; border: 1px solid; }
+.ft-status-info   { background: rgba(124,140,255,0.10); border-color: rgba(124,140,255,0.35); color: #C3CBFF; }
+.ft-status-ok     { background: var(--ft-bull-soft);    border-color: var(--ft-bull-line);    color: #6FD9B0; }
+.ft-status-err    { background: var(--ft-bear-soft);    border-color: var(--ft-bear-line);    color: #F0A183; }
+
+.ft-sec { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--ft-ink-3); font-weight: 650; margin: 1.5rem 0 0.6rem; }
+.ft-sec:first-child { margin-top: 0; }
+.ft-foot { color: var(--ft-ink-3); font-size: 0.78rem; line-height: 1.6;
+  margin-top: 2rem; padding-top: 1.1rem; border-top: 1px solid var(--ft-line); }
+.ft-input { width: 100%; min-height: var(--ft-tap); background: rgba(0,0,0,0.3);
+  border: 1px solid var(--ft-line); border-radius: var(--ft-r-sm); padding: 0 1rem;
+  color: var(--ft-ink); font-size: 1rem; }
+.ft-input:focus { outline: 2px solid var(--ft-accent); outline-offset: -1px; }
+.ft-mini { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+.ft-mini th { text-align: left; color: var(--ft-ink-3); font-weight: 600; font-size: 0.68rem;
+  text-transform: uppercase; letter-spacing: 0.05em; padding: 0.5rem 0.4rem; }
+.ft-mini td { padding: 0.55rem 0.4rem; border-top: 1px solid var(--ft-line); }
+.ft-scroll { overflow-x: auto; }
+.ft-sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+{% endblock %}
+
+{% block content %}
+<div class="ft">
+
+  <header class="ft-head">
+    <div>
+      <h1 class="ft-title">Foresight<span>Tape</span></h1>
+      <p class="ft-sub">
+        Next-session probabilities from a volatility model{% if catalyst_available %},
+        tilted by researched catalysts{% endif %}. A well-calibrated board sits near
+        50% — distance from the centre line is the entire claimed edge.
+      </p>
+    </div>
+    <div class="ft-actions">
+      {% if catalyst_available %}
+      <label class="ft-switch" title="Blend in researched catalysts (earnings, Fed, news)">
+        <input type="checkbox" id="catalystToggle" checked>
+        <span>Catalysts</span>
+      </label>
+      {% else %}
+      <span class="ft-badge ft-b-doji" title="Set ANTHROPIC_API_KEY on the server to enable">
+        quant-only
+      </span>
+      {% endif %}
+      <button id="installBtn" class="ft-btn ft-btn-ghost" hidden>Install app</button>
+      <button id="scanBtn" class="ft-btn">Scan market</button>
+    </div>
+  </header>
+
+  <div id="iosHint" class="ft-status ft-status-info" hidden>
+    <b>Add to Home Screen</b> — tap the Share button below, then
+    <b>Add to Home Screen</b>. Foresight then opens full-screen, like an app.
+    <button id="iosHintClose" class="ft-btn ft-btn-ghost"
+            style="min-height:32px;padding:0 .8rem;margin-left:.5rem">Got it</button>
+  </div>
+
+  <div id="tapeWrap" class="ft-tape" hidden><div id="tape" class="ft-tape-track"></div></div>
+  <div id="statusBar" hidden></div>
+
+  <div class="ft-tabs" role="tablist">
+    <button class="ft-tab" role="tab" aria-selected="true"  data-view="board">Board</button>
+    <button class="ft-tab" role="tab" aria-selected="false" data-view="grid">Heatmap</button>
+    <button class="ft-tab" role="tab" aria-selected="false" data-view="watch">Watchlist</button>
+    <button class="ft-tab" role="tab" aria-selected="false" data-view="score">Accuracy</button>
+  </div>
+
+  <!-- BOARD -->
+  <section id="view-board" role="tabpanel">
+    <div id="boardEmpty" class="ft-empty">
+      Nothing scanned yet. <b>Scan market</b> builds a probability board for every
+      tracked ticker — the tape, board and heatmap all fill from one scan.
+    </div>
+    <div id="boardSort" class="ft-actions" style="margin-bottom:.75rem" hidden>
+      <span class="ft-sec" style="margin:0">Sort</span>
+      <button class="ft-tab" data-sort="conviction" aria-selected="true">Conviction</button>
+      <button class="ft-tab" data-sort="p_up" aria-selected="false">P(up)</button>
+      <button class="ft-tab" data-sort="expected_move_pct" aria-selected="false">Move</button>
+      <button class="ft-tab" data-sort="ticker" aria-selected="false">Symbol</button>
+    </div>
+    <div id="boardRows" class="ft-rows"></div>
+  </section>
+
+  <!-- HEATMAP -->
+  <section id="view-grid" role="tabpanel" hidden>
+    <div id="gridEmpty" class="ft-empty">Run a scan to see the heatmap.</div>
+    <div id="grid" class="ft-grid"></div>
+    <p id="gridLegend" class="ft-foot" hidden>
+      Tint depth = conviction. Direction is shown by the arrow and label as well as
+      colour, so the board stays readable without colour vision.
+    </p>
+  </section>
+
+  <!-- WATCHLIST -->
+  <section id="view-watch" role="tabpanel" hidden>
+    <label class="ft-sr" for="wlInput">Ticker symbols</label>
+    <div style="display:flex; gap:.6rem; flex-wrap:wrap; margin-bottom:1rem">
+      <input id="wlInput" class="ft-input" style="flex:1 1 16rem"
+             placeholder="LMT, XOM, CRWD, BRK-B…" autocomplete="off"
+             autocapitalize="characters" spellcheck="false">
+      <button id="wlBtn" class="ft-btn">Forecast</button>
+    </div>
+    <div id="wlEmpty" class="ft-empty">
+      Up to 12 symbols, same treatment as the board: a year of history through the
+      volatility engine.
+    </div>
+    <div id="wlRows" class="ft-rows"></div>
+  </section>
+
+  <!-- ACCURACY -->
+  <section id="view-score" role="tabpanel" hidden>
+    <div class="ft-card">
+      <div style="display:flex; gap:1rem; align-items:flex-start; justify-content:space-between; flex-wrap:wrap">
+        <div style="flex:1 1 22rem">
+          <b>Historical backtest</b>
+          <p class="ft-sub" style="margin-top:.35rem">
+            Replays the engine through history — each session forecast using only the
+            bars that existed then — so you get a real skill estimate now instead of
+            waiting weeks. Catalysts are excluded: past research can't be
+            reconstructed without leaking the answer.
+          </p>
+        </div>
+        <button id="btBtn" class="ft-btn ft-btn-ghost">Run backtest</button>
+      </div>
+      <div id="btStatus" style="margin-top:.9rem" hidden></div>
+      <div id="btResults" style="margin-top:.9rem" hidden></div>
+    </div>
+
+    <div class="ft-sec">Live forecast ledger</div>
+    <div id="scoreCards" class="ft-stats"></div>
+    <div id="scoreDetail"></div>
+  </section>
+
+  <p class="ft-foot">
+    Forecasts, not advice. Every figure is a modelled probability for the next
+    session, graded after the fact on the Accuracy tab. A next-session candle is
+    the noisiest object in markets — <b>doji means the honest answer is “no edge”</b>,
+    and most days most tickers should say exactly that.
+  </p>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(() => {
+"use strict";
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g,
+  (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+const state = { market: null, watch: null, sort: "conviction", loading: false };
+
+// Direction is encoded three ways — glyph, word, colour — so it never depends
+// on colour vision alone.
+const DIR = {
+  bull: { word: "Bullish", glyph: "▲", cls: "ft-b-bull", css: "var(--ft-bull)" },
+  bear: { word: "Bearish", glyph: "▼", cls: "ft-b-bear", css: "var(--ft-bear)" },
+  doji: { word: "No edge", glyph: "—", cls: "ft-b-doji", css: "var(--ft-doji)" },
+};
+const dir = (d) => DIR[d] || DIR.doji;
+const pct = (v, signed = true) =>
+  v == null ? "—" : `${signed && v > 0 ? "+" : ""}${Number(v).toFixed(2)}%`;
+
+function status(html, kind = "info") {
+  const el = $("statusBar");
+  if (!html) { el.hidden = true; return; }
+  el.className = `ft-status ft-status-${kind}`;
+  el.innerHTML = html;
+  el.hidden = false;
+}
+
+const useCatalyst = () => ($("catalystToggle") ? $("catalystToggle").checked : false);
+
+async function getJSON(url) {
+  const res = await fetch(url);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  return data;
+}
+
+// ---------- tape ----------
+function renderTape() {
+  const all = [...(state.market?.rows || []), ...(state.watch?.rows || [])];
+  const seen = new Set(), rows = [];
+  for (const r of all) if (!seen.has(r.ticker)) { seen.add(r.ticker); rows.push(r); }
+  if (!rows.length) { $("tapeWrap").hidden = true; return; }
+
+  const chip = (r) => {
+    const d = dir(r.direction);
+    return `<span class="ft-chip ft-num"><b>${esc(r.ticker)}</b>` +
+      `<span style="color:${d.css}">${d.glyph} ${(r.p_up * 100).toFixed(0)}%</span>` +
+      `<span style="color:var(--ft-ink-3)">±${Number(r.band_68_pct).toFixed(1)}%</span></span>`;
+  };
+  const strip = rows.map(chip).join("");
+  $("tape").innerHTML = strip + strip;   // doubled for the seamless loop
+  $("tapeWrap").hidden = false;
+}
+
+// ---------- forecast rows ----------
+function sortRows(rows) {
+  const key = state.sort;
+  const order = { bull: 2, doji: 1, bear: 0 };
+  return [...rows].sort((a, b) => {
+    if (key === "ticker") return String(a.ticker).localeCompare(String(b.ticker));
+    if (key === "expected_move_pct") return Math.abs(b[key] ?? 0) - Math.abs(a[key] ?? 0);
+    if (key === "p_up") return Math.abs((b.p_up ?? .5) - .5) - Math.abs((a.p_up ?? .5) - .5);
+    return (b[key] ?? 0) - (a[key] ?? 0) || (order[b.direction] - order[a.direction]);
+  });
+}
+
+function rowHTML(r) {
+  const d = dir(r.direction);
+  const p = Number(r.p_up);
+  // Half-width from the 50% midpoint: the visual length *is* the edge.
+  const w = Math.min(Math.abs(p - 0.5) * 100, 50);
+  const bar = p >= 0.5
+    ? `<i style="left:50%;width:${w}%;background:${d.css}"></i>`
+    : `<i style="right:50%;width:${w}%;background:${d.css}"></i>`;
+  const cat = r.catalyst
+    ? ` <span class="ft-badge ft-b-doji" title="${esc(r.catalyst)}">⚡ ${esc(r.catalyst)}</span>` : "";
+
+  return `<article class="ft-row" data-dir="${esc(r.direction)}">
+    <div class="ft-id">
+      <div class="ft-tick">${esc(r.ticker)}
+        <span class="ft-badge ${d.cls}">${d.glyph} ${d.word}</span></div>
+      <div class="ft-name">${esc(r.name || "")}</div>
+    </div>
+    <div class="ft-bar" role="img"
+         aria-label="Probability of an up session ${(p * 100).toFixed(1)} percent">${bar}</div>
+    <div class="ft-move">
+      <div class="ft-move-v ft-num" style="color:${d.css}">${pct(r.expected_move_pct)}</div>
+      <div class="ft-move-s ft-num">${(p * 100).toFixed(0)}% up · ±${Number(r.band_68_pct).toFixed(1)}%</div>
+    </div>
+    <div class="ft-why">${esc(r.rationale || "")}${cat}</div>
+  </article>`;
+}
+
+function renderBoard() {
+  const rows = state.market?.rows || [];
+  $("boardEmpty").hidden = rows.length > 0;
+  $("boardSort").hidden = rows.length === 0;
+  $("boardRows").innerHTML = sortRows(rows).map(rowHTML).join("");
+
+  $("gridEmpty").hidden = rows.length > 0;
+  $("gridLegend").hidden = rows.length === 0;
+  $("grid").innerHTML = sortRows(rows).map((r) => {
+    const d = dir(r.direction);
+    // Conviction drives tint depth; direction still carries a glyph and label.
+    const a = (0.07 + (Math.min(r.conviction, 100) / 100) * 0.20).toFixed(3);
+    const tint = r.direction === "bull" ? `rgba(25,158,112,${a})`
+               : r.direction === "bear" ? `rgba(217,89,38,${a})`
+               : `rgba(154,154,148,${a})`;
+    return `<div class="ft-tile" style="background:${tint}" title="${esc(r.rationale || "")}">
+      <div class="ft-tile-top">
+        <span class="ft-tick">${esc(r.ticker)}</span>
+        <span class="ft-num" style="color:${d.css};font-weight:650">${d.glyph} ${(r.p_up * 100).toFixed(0)}%</span>
+      </div>
+      <div>
+        <div class="ft-name">${esc(r.name || "")}</div>
+        <div class="ft-num" style="font-size:.8rem;color:${d.css}">${pct(r.expected_move_pct)}
+          <span style="color:var(--ft-ink-3)">±${Number(r.band_68_pct).toFixed(1)}%</span></div>
+      </div>
+    </div>`;
+  }).join("");
+
+  const wl = state.watch?.rows || [];
+  $("wlEmpty").hidden = wl.length > 0;
+  $("wlRows").innerHTML = sortRows(wl).map(rowHTML).join("");
+  renderTape();
+}
+
+// ---------- diagnostics ----------
+async function runDiagnostics() {
+  const out = $("diagOut");
+  if (!out) return;
+  out.innerHTML = "Probing DNS, then each price provider in turn…";
+  try {
+    const d = await getJSON("/foresight/api/diagnostics");
+    const v = d.verdict || {}, p = d.probes || {};
+    const row = (k, ok, extra) =>
+      `<tr><td>${esc(k)}</td><td class="ft-num" style="text-align:right;color:${
+        ok ? "var(--ft-bull)" : "var(--ft-bear)"}">${ok ? "OK" : "failed"} ${esc(extra || "")}</td></tr>`;
+    out.innerHTML = `<div class="ft-card" style="margin-top:.75rem">
+      <b>${esc(v.summary || "")}</b>
+      <div class="ft-sub" style="margin:.4rem 0 .75rem"><b>Fix:</b> ${esc(v.action || "")}</div>
+      <table class="ft-mini"><tbody>
+        ${row("Yahoo reachable", (p.https_direct || {}).ok, (p.https_direct || {}).status_code)}
+        ${row("1. Yahoo chart API", (p.yahoo_chart_provider || {}).ok,
+              ((p.yahoo_chart_provider || {}).bars || 0) + " bars")}
+        ${row("2. yfinance", ((p.yfinance || {}).download || {}).ok ||
+                             ((p.yfinance || {}).ticker_history || {}).ok, "")}
+        ${row("3. Stooq", (p.stooq_fallback || {}).ok, ((p.stooq_fallback || {}).bars || 0) + " bars")}
+        ${row("Board fetch", (p.engine_fetch || {}).ok, ((p.engine_fetch || {}).bars || 0) + " bars")}
+      </tbody></table>
+      <div class="ft-sub" style="margin-top:.5rem">Only one provider needs to
+        work — a failed row is not necessarily the problem.</div>
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.75rem">
+        <button id="diagCopy" class="ft-btn ft-btn-ghost">Copy report</button>
+        <button id="diagRetry" class="ft-btn ft-btn-ghost">Retry scan</button>
+      </div>
+      <details style="margin-top:.6rem"><summary class="ft-sub">Raw output</summary>
+        <pre class="ft-num" style="white-space:pre-wrap;max-height:280px;overflow:auto;font-size:.72rem">${esc(JSON.stringify(d, null, 2))}</pre>
+      </details></div>`;
+    // One tap to grab the whole report — easier than selecting JSON on a phone.
+    const copy = $("diagCopy");
+    if (copy) copy.onclick = async () => {
+      const text = JSON.stringify(d, null, 2);
+      try {
+        await navigator.clipboard.writeText(text);
+        copy.textContent = "Copied ✓";
+      } catch {
+        // Clipboard needs a secure context; fall back to a selectable block.
+        copy.insertAdjacentHTML("afterend",
+          `<textarea class="ft-input" style="height:9rem;padding:.5rem;font-size:.7rem"
+             readonly onclick="this.select()">${esc(text)}</textarea>`);
+        copy.textContent = "Select all and copy";
+      }
+      setTimeout(() => { copy.textContent = "Copy report"; }, 4000);
+    };
+    const retry = $("diagRetry");
+    if (retry) retry.onclick = scanMarket;
+  } catch (e) {
+    out.innerHTML = `<span style="color:var(--ft-bear)">Diagnostics failed: ${esc(e.message)}</span>`;
+  }
+}
+
+// ---------- scans ----------
+function setLoading(on) {
+  state.loading = on;
+  $("scanBtn").disabled = on;
+  $("wlBtn").disabled = on;
+}
+
+async function scanMarket() {
+  if (state.loading) return;
+  const cat = useCatalyst();
+  setLoading(true);
+  status(cat ? "Running the volatility engine, then researching catalysts — up to a minute…"
+             : "Running the volatility engine across the board…", "info");
+  try {
+    state.market = await getJSON(`/foresight/api/market?catalyst=${cat ? 1 : 0}`);
+    sessionStorage.setItem("ft-market", JSON.stringify(state.market));
+    const m = state.market;
+    if (m.error) {
+      // An empty board is never left as a dead end: run the probes immediately
+      // so the cause is on screen without anyone having to go looking for it.
+      status(`<b>No data came back.</b><div style="margin:.4rem 0 .7rem">${esc(m.error)}</div>
+        <div id="diagOut">Checking the data connection…</div>`, "err");
+      runDiagnostics();
+    } else {
+      const bits = [`${m.rows.length} tickers`];
+      if (m.catalyst_applied) bits.push("catalysts applied");
+      (m.fetch_reasons || []).forEach((r) => bits.push(r));
+      status(bits.join(" · "), "ok");
+      setTimeout(() => { if (!state.loading) status(null); }, 7000);
+    }
+  } catch (e) { status(`Scan failed: ${esc(e.message)}`, "err"); }
+  setLoading(false);
+  renderBoard();
+}
+
+async function scanWatchlist() {
+  if (state.loading) return;
+  const raw = $("wlInput").value.trim();
+  if (!raw) return;
+  setLoading(true);
+  status("Forecasting watchlist…", "info");
+  try {
+    state.watch = await getJSON(
+      `/foresight/api/watchlist?tickers=${encodeURIComponent(raw)}&catalyst=${useCatalyst() ? 1 : 0}`);
+    sessionStorage.setItem("ft-watch", JSON.stringify(state.watch));
+    sessionStorage.setItem("ft-watch-input", raw);
+    status(state.watch.error ? esc(state.watch.error) : null,
+           state.watch.error ? "err" : "ok");
+  } catch (e) { status(`Watchlist failed: ${esc(e.message)}`, "err"); }
+  setLoading(false);
+  renderBoard();
+}
+
+// ---------- accuracy ----------
+const statTile = (label, value, hint) =>
+  `<div class="ft-stat" title="${esc(hint || "")}">
+     <div class="ft-stat-v ft-num">${value}</div><div class="ft-stat-l">${esc(label)}</div></div>`;
+
+async function loadScorecard() {
+  try {
+    const d = await getJSON("/foresight/api/scorecard");
+    const s = d.scorecard || {};
+    if (!s.resolved) {
+      $("scoreCards").innerHTML = "";
+      $("scoreDetail").innerHTML =
+        `<div class="ft-empty">${esc(s.message || "No resolved forecasts yet.")}</div>`;
+      return;
+    }
+    const skill = s.brier_skill_score;
+    $("scoreCards").innerHTML =
+      statTile("Resolved", s.resolved, `Trailing ${s.window_days} days`) +
+      statTile("Brier", s.brier.toFixed(3), "Mean squared probability error — 0.25 is a coin flip") +
+      statTile("Skill", `<span style="color:${skill > 0 ? "var(--ft-bull)" : "var(--ft-bear)"}">${(skill * 100).toFixed(1)}%</span>`,
+               "Improvement over always predicting 50/50") +
+      statTile("Hit rate", s.hit_rate == null ? "—" : (s.hit_rate * 100).toFixed(0) + "%",
+               `${s.directional_calls} directional calls; ${s.doji_calls} dojis excluded`);
+
+    $("scoreDetail").innerHTML = `
+      <div class="ft-sec">Calibration — claimed vs. realised</div>
+      <div class="ft-card ft-scroll"><table class="ft-mini">
+        <thead><tr><th>Forecast</th><th style="text-align:right">N</th>
+          <th style="text-align:right">Realised up</th></tr></thead>
+        <tbody>${(s.calibration || []).map((b) => `<tr>
+          <td class="ft-num">${esc(b.range)}</td>
+          <td class="ft-num" style="text-align:right">${b.count}</td>
+          <td class="ft-num" style="text-align:right">${(b.realized_up_rate * 100).toFixed(0)}%</td>
+        </tr>`).join("") || `<tr><td colspan="3">Not enough data yet.</td></tr>`}</tbody>
+      </table></div>
+      <div class="ft-sec">Recently graded</div>
+      <div class="ft-rows">${(d.recent || []).slice(0, 25).map((r) => {
+        const dd = dir(r.direction);
+        return `<div class="ft-row" data-dir="${esc(r.direction)}"
+                     style="grid-template-areas:'id move';grid-template-columns:1fr auto">
+          <div class="ft-id"><div class="ft-tick">${esc(r.ticker)}
+            <span class="ft-badge ${dd.cls}">${dd.glyph} ${dd.word}</span></div>
+            <div class="ft-name">${esc(r.target_date || "")} · claimed ${(r.p_up * 100).toFixed(0)}%</div></div>
+          <div class="ft-move"><div class="ft-move-v ft-num" style="color:${
+            r.realized_return_pct >= 0 ? "var(--ft-bull)" : "var(--ft-bear)"}">${pct(r.realized_return_pct)}</div>
+            <div class="ft-move-s ft-num">Brier ${r.brier.toFixed(3)}</div></div>
+        </div>`;
+      }).join("") || `<div class="ft-empty">Nothing graded yet.</div>`}</div>`;
+  } catch (e) {
+    $("scoreDetail").innerHTML = `<div class="ft-status ft-status-err">${esc(e.message)}</div>`;
+  }
+}
+
+// ---------- backtest ----------
+function verdict(s) {
+  const b = s.baselines || {};
+  if (!b.beats_coin_flip)
+    return ["err", "No measurable edge — the engine did not beat a coin flip over this sample."];
+  if (!b.beats_always_up)
+    return ["err", "Beats a coin flip but not a naive always-up caller, which equity drift alone rewards. Treat the directional calls as noise."];
+  if (s.brier_skill_score < 0.01)
+    return ["info", "Positive but very small edge — consistent with next-session direction being mostly noise."];
+  return ["ok", "Beats both a coin flip and a naive always-up caller over this sample."];
+}
+
+async function runBacktest() {
+  $("btBtn").disabled = true;
+  $("btStatus").className = "ft-status ft-status-info";
+  $("btStatus").textContent = "Replaying history across every tracked ticker…";
+  $("btStatus").hidden = false;
+  try {
+    const s = await getJSON("/foresight/api/backtest");
+    if (!s.predictions) {
+      $("btResults").innerHTML = `<div class="ft-empty">${esc(s.message || "No predictions produced.")}</div>`;
+    } else {
+      const [kind, text] = verdict(s), b = s.baselines || {};
+      $("btResults").innerHTML = `
+        <div class="ft-status ft-status-${kind}">${esc(text)}</div>
+        <div class="ft-stats" style="margin-bottom:.9rem">
+          ${statTile("Predictions", s.predictions.toLocaleString(),
+                     `${s.tickers_tested} tickers, ${s.date_range.start} to ${s.date_range.end}`)}
+          ${statTile("Brier", s.brier.toFixed(4), "Lower is better; 0.25 is a coin flip")}
+          ${statTile("Skill", `<span style="color:${s.brier_skill_score > 0 ? "var(--ft-bull)" : "var(--ft-bear)"}">${(s.brier_skill_score * 100).toFixed(2)}%</span>`,
+                     "Versus always predicting 50/50")}
+          ${statTile("Hit rate", s.hit_rate == null ? "—" : (s.hit_rate * 100).toFixed(0) + "%",
+                     `${s.directional_calls} directional calls`)}
+        </div>
+        <div class="ft-card ft-scroll"><table class="ft-mini">
+          <thead><tr><th>Versus baseline</th><th style="text-align:right">Brier</th></tr></thead>
+          <tbody>
+            <tr><td>This engine</td><td class="ft-num" style="text-align:right">${s.brier.toFixed(4)}</td></tr>
+            <tr><td>Coin flip</td><td class="ft-num" style="text-align:right">${b.coin_flip_brier.toFixed(4)}</td></tr>
+            <tr><td>Always up</td><td class="ft-num" style="text-align:right">${b.always_up_brier.toFixed(4)}</td></tr>
+            <tr><td style="color:var(--ft-ink-3)">Sessions that closed up</td>
+                <td class="ft-num" style="text-align:right;color:var(--ft-ink-3)">${(s.realized_up_rate * 100).toFixed(1)}%</td></tr>
+          </tbody></table></div>`;
+    }
+    $("btResults").hidden = false;
+    $("btStatus").hidden = true;
+  } catch (e) {
+    $("btStatus").className = "ft-status ft-status-err";
+    $("btStatus").textContent = `Backtest failed: ${e.message}`;
+  }
+  $("btBtn").disabled = false;
+}
+
+// ---------- wiring ----------
+document.querySelectorAll(".ft-tabs .ft-tab").forEach((btn) => btn.onclick = () => {
+  document.querySelectorAll(".ft-tabs .ft-tab").forEach((b) => b.setAttribute("aria-selected", "false"));
+  btn.setAttribute("aria-selected", "true");
+  ["board", "grid", "watch", "score"].forEach((v) => { $(`view-${v}`).hidden = v !== btn.dataset.view; });
+  if (btn.dataset.view === "score") loadScorecard();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+});
+
+document.querySelectorAll("#boardSort .ft-tab").forEach((btn) => btn.onclick = () => {
+  document.querySelectorAll("#boardSort .ft-tab").forEach((b) => b.setAttribute("aria-selected", "false"));
+  btn.setAttribute("aria-selected", "true");
+  state.sort = btn.dataset.sort;
+  renderBoard();
+});
+
+$("scanBtn").onclick = scanMarket;
+$("wlBtn").onclick = scanWatchlist;
+$("btBtn").onclick = runBacktest;
+$("wlInput").addEventListener("keydown", (e) => { if (e.key === "Enter") scanWatchlist(); });
+
+try {
+  state.market = JSON.parse(sessionStorage.getItem("ft-market") || "null");
+  state.watch = JSON.parse(sessionStorage.getItem("ft-watch") || "null");
+  $("wlInput").value = sessionStorage.getItem("ft-watch-input") || "";
+} catch { /* cold start */ }
+renderBoard();
+
+// ---------- installable app ----------
+// The worker is served from the root so its scope covers the whole app; a
+// worker delivered from /static/ could only control /static/.
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js", { scope: "/" })
+      .catch((e) => console.warn("Service worker registration failed:", e));
+  });
+}
+
+// Chrome/Edge/Android: capture the install prompt and offer it on our own button.
+let deferredPrompt = null;
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  $("installBtn").hidden = false;
+});
+$("installBtn").onclick = async () => {
+  if (!deferredPrompt) return;
+  deferredPrompt.prompt();
+  await deferredPrompt.userChoice;
+  deferredPrompt = null;
+  $("installBtn").hidden = true;
+};
+window.addEventListener("appinstalled", () => { $("installBtn").hidden = true; });
+
+// iOS has no install prompt API — Safari requires the Share menu — so show the
+// instructions instead, once, and only when not already running standalone.
+const standalone = window.matchMedia("(display-mode: standalone)").matches
+  || window.navigator.standalone === true;
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+if (isIOS && !standalone && !localStorage.getItem("ft-ios-hint-dismissed")) {
+  $("iosHint").hidden = false;
+  $("iosHintClose").onclick = () => {
+    $("iosHint").hidden = true;
+    localStorage.setItem("ft-ios-hint-dismissed", "1");
+  };
+}
+
+// Offline banner: a stale board shown as if it were live would be worse than
+// no board at all, so say plainly when the network is gone.
+function connectivity() {
+  if (!navigator.onLine) {
+    status("<b>Offline.</b> Showing the last saved board — these figures are not live.", "err");
+  }
+}
+window.addEventListener("offline", connectivity);
+window.addEventListener("online", () => status(null));
+connectivity();
+
+// Deep links from the manifest shortcuts.
+const params = new URLSearchParams(location.search);
+if (params.get("tab")) {
+  const t = document.querySelector(`.ft-tabs .ft-tab[data-view="${params.get("tab")}"]`);
+  if (t) t.click();
+}
+if (params.get("action") === "scan") scanMarket();
+})();
+</script>
+{% endblock %}

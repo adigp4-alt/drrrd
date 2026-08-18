@@ -6,4 +6,50 @@ services:
     plan: free
     region: oregon
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn main:app --bind 0.0.0.0:$PORT
+    # One worker: the app starts an APScheduler thread at boot, so a second
+    # worker would run a duplicate scheduler (double price fetches, double
+    # forecast grading). Concurrency comes from threads instead.
+    # The 300s timeout is deliberate — a catalyst-overlay market scan runs web
+    # research through Claude and can exceed gunicorn's 30s default.
+    startCommand: gunicorn main:app --bind 0.0.0.0:$PORT --workers 1 --threads 8 --timeout 300
+    envVars:
+      # Enables the Claude catalyst overlay on /foresight. Leave unset to run
+      # the forecast board in quant-only mode. Set the value in the Render
+      # dashboard, not here — never commit a key.
+      - key: ANTHROPIC_API_KEY
+        sync: false
+
+      # Durable storage for the forecast accuracy ledger.
+      #
+      # The free plan has an ephemeral filesystem and no persistent disks, so
+      # by default SQLite is wiped on every redeploy and the scorecard restarts
+      # from zero. Two ways to keep it:
+      #
+      #   1. Postgres (works on the free plan) — create a Render Postgres
+      #      instance, then set DATABASE_URL to its Internal Connection String.
+      #      Uncomment the block below to wire it up automatically.
+      #   2. A persistent disk (requires a paid instance type) — uncomment the
+      #      `disk:` block at the bottom and set DATA_DIR to its mount path.
+      #
+      # - key: DATABASE_URL
+      #   fromDatabase:
+      #     name: iran-tracker-db
+      #     property: connectionString
+
+      # Where SQLite and CSV snapshots are written. Only meaningful when a disk
+      # is attached; ignored when DATABASE_URL points at Postgres.
+      # - key: DATA_DIR
+      #   value: /var/data
+
+# Option 1: managed Postgres (free plan eligible). Uncomment together with the
+# DATABASE_URL env var above.
+# databases:
+#   - name: iran-tracker-db
+#     plan: free
+
+# Option 2: persistent disk (paid instance types only). Uncomment together with
+# the DATA_DIR env var above, and attach it to the service.
+#     disk:
+#       name: tracker-data
+#       mountPath: /var/data
+#       sizeGB: 1

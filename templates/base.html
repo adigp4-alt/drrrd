@@ -7,10 +7,9 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="Iran Tracker">
     <meta name="format-detection" content="telephone=no">
-    <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}">
-    <link rel="manifest" href="{{ url_for('static', filename='manifest.webmanifest') }}">
+    <!-- Install/manifest wiring belongs to the pwa blueprint; pages that want to
+         be installable link it themselves (see foresight.html). -->
     <title>{% block title %}Iran Investment Tracker{% endblock %}</title>
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -31,6 +30,9 @@
             --primary-glow: rgba(59, 130, 246, 0.5);
             --success-color: #10B981;
             --danger-color: #F43F5E;
+            /* Height of the phone tab bar, excluding the safe-area inset. Pages
+               with their own bottom-fixed chrome stack above it by this much. */
+            --ios-tabbar-h: 56px;
         }
         
         body {
@@ -243,7 +245,7 @@
             justify-content: center;
             gap: 3px;
             padding: 8px 0 6px;
-            min-height: 56px;
+            min-height: var(--ios-tabbar-h);
             color: #64748B;
             text-decoration: none;
             font-size: 0.65rem;
@@ -391,6 +393,7 @@
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav">
                     <li class="nav-item"><a class="nav-link" href="/">Dashboard</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/foresight">Foresight</a></li>
                     <li class="nav-item"><a class="nav-link" href="/screener">Screener</a></li>
                     <li class="nav-item"><a class="nav-link" href="/portfolio">Portfolio</a></li>
                     <li class="nav-item"><a class="nav-link" href="/backtest">Backtest</a></li>
@@ -412,9 +415,9 @@
     <!-- iPhone bottom tab bar -->
     <nav class="ios-tabbar d-lg-none" aria-label="Primary">
         <a class="tab-item" href="/"><i class="fa-solid fa-chart-line"></i><span>Dashboard</span></a>
+        <a class="tab-item" href="/foresight"><i class="fa-solid fa-arrow-trend-up"></i><span>Foresight</span></a>
         <a class="tab-item" href="/screener"><i class="fa-solid fa-magnifying-glass-chart"></i><span>Screener</span></a>
         <a class="tab-item" href="/portfolio"><i class="fa-solid fa-briefcase"></i><span>Portfolio</span></a>
-        <a class="tab-item" href="/alerts"><i class="fa-solid fa-bell"></i><span>Alerts</span></a>
         <button class="tab-item" id="moreTab" type="button" aria-controls="moreSheet" aria-expanded="false">
             <i class="fa-solid fa-ellipsis"></i><span>More</span>
         </button>
@@ -427,6 +430,7 @@
         <a class="ios-sheet-item" href="/backtest"><i class="fa-solid fa-clock-rotate-left"></i>Backtest<i class="fa-solid fa-chevron-right chevron"></i></a>
         <a class="ios-sheet-item" href="/stat-arb"><i class="fa-solid fa-scale-balanced"></i>Stat-Arb<i class="fa-solid fa-chevron-right chevron"></i></a>
         <a class="ios-sheet-item" href="/analysis"><i class="fa-solid fa-wave-square"></i>Analysis<i class="fa-solid fa-chevron-right chevron"></i></a>
+        <a class="ios-sheet-item" href="/alerts"><i class="fa-solid fa-bell"></i>Alerts<i class="fa-solid fa-chevron-right chevron"></i></a>
         <a class="ios-sheet-item" href="/watchlist"><i class="fa-solid fa-star"></i>Watchlist<i class="fa-solid fa-chevron-right chevron"></i></a>
         <a class="ios-sheet-item" href="/correlation"><i class="fa-solid fa-diagram-project"></i>Correlation<i class="fa-solid fa-chevron-right chevron"></i></a>
         <a class="ios-sheet-item" href="/reports"><i class="fa-solid fa-file-lines"></i>Reports<i class="fa-solid fa-chevron-right chevron"></i></a>

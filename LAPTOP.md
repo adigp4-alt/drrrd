@@ -117,7 +117,7 @@ export DATA_DIR=~/foresight-data
 |---|---|
 | Phone can't connect | Different WiFi network, or laptop firewall blocking. Check the laptop can reach `http://localhost:5000` first. |
 | Works on laptop, not phone | Firewall. macOS: System Settings → Network → Firewall → Options. Windows: allow Python on *Private networks*. |
-| Board empty on the laptop too | Then it isn't an IP-blocking problem. The board self-diagnoses — read the banner, or open `/foresight/api/diagnostics`. |
+| Board empty on the laptop too | Run `python diagnose.py` — it prints a full report naming the cause, including yfinance's own internal log. Paste the output when reporting. |
 | No **Install app** button | Expected over plain `http://` — see Step 3. |
 | `command not found: python3` | Install Python 3.10+ from [python.org](https://www.python.org/downloads/). |
 | App stops when you close the laptop | Expected — it runs only while that terminal is open and the machine is awake. |

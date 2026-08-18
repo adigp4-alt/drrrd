@@ -46,10 +46,29 @@ Endpoints: `/foresight/api/market`, `/foresight/api/watchlist?tickers=…`,
 `POST /foresight/api/resolve`.
 Tests: `python -m unittest discover -s tests`.
 
-**Board empty?** Run `python diagnose.py` — a standalone report that separates a
-blocked IP, a rate limit, a yfinance/API mismatch and a network problem, and
-captures yfinance's own log (it reports most failures by logging them and
-returning an empty frame, so the app sees "no data" with no exception).
+### Where the prices come from
+
+Three independent providers, tried in order, each asked only for the tickers the
+previous one could not supply:
+
+1. **Yahoo's chart API, called directly** — plain HTTPS against
+   `v8/finance/chart`, no library in the way. Chart data needs no cookie/crumb
+   handshake, so this path is immune both to Yahoo changing that handshake and
+   to yfinance changing its response shape.
+2. **yfinance** — kept as a second path for its own retry and session handling.
+3. **Stooq** — a different origin entirely, for when Yahoo refuses the host
+   outright (it throttles datacenter IP ranges hard, which is what makes a
+   cloud-deployed board go blank).
+
+The board reports which provider served the data whenever it isn't the first, so
+a degraded path is visible rather than silent. Historically the app depended on
+yfinance alone, and every blank board traced back to that.
+
+**Board empty?** Run `python diagnose.py` — a standalone report that runs each
+provider separately and separates a blocked IP, a rate limit, a yfinance/API
+mismatch and a network problem. It also captures yfinance's own log, since it
+reports most failures by logging them and returning an empty frame, leaving the
+app with "no data" and no exception.
 
 ### ⚠️ Keeping the accuracy history
 
@@ -241,7 +260,7 @@ iran-tracker-web/
 | `ANTHROPIC_API_KEY` | No | Enables the Claude catalyst overlay on `/foresight`. Unset = quant-only mode. Set it in your host's dashboard — never commit it. |
 | `DATABASE_URL` | No | Postgres connection string. When set, all storage uses Postgres instead of SQLite. |
 | `DATA_DIR` | No | Where SQLite and CSV snapshots are written (default `data`). Point at a mounted volume to persist across redeploys. |
-| `MARKET_DATA_SOURCE` | No | `auto` (default) tries Yahoo and falls back to Stooq per ticker; `yahoo` or `stooq` forces one provider. |
+| `MARKET_DATA_SOURCE` | No | Which price providers to use, in order. `auto` (default) = Yahoo chart API → yfinance → Stooq, each asked only for what the previous one missed. `yahoo` drops Stooq; `stooq`, `chart` and `yfinance` each force a single provider (useful for isolating a fault). |
 | `PORT` | No | Port to bind (default `5000`). Most hosts set this for you. |
 
 ---

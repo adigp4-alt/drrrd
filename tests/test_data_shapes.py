@@ -142,20 +142,23 @@ class EndToEndParsingTests(unittest.TestCase):
     """The full fetch path, with yfinance stubbed to each response shape."""
 
     def _run_with(self, raw, tickers):
-        from app import forecast_engine
+        """Run the fetch path with only the yfinance provider enabled.
 
-        original = forecast_engine.yf
+        The engine tries Yahoo's chart API first in normal operation; pinning
+        the source here keeps these tests about yfinance response *shapes*,
+        which is what they exist to cover, and keeps them off the network.
+        """
+        from unittest import mock
+        from app import forecast_engine, market_data
 
         class FakeYF:
             @staticmethod
             def download(*args, **kwargs):
                 return raw
 
-        forecast_engine.yf = FakeYF
-        try:
+        with mock.patch.object(forecast_engine, "yf", FakeYF), \
+             mock.patch.object(market_data, "SOURCE_MODE", "yfinance"):
             return forecast_engine.fetch_bars_with_reasons(tickers, period="5d")
-        finally:
-            forecast_engine.yf = original
 
     def test_multi_ticker_ticker_grouped(self):
         bars, reasons = self._run_with(grouped_by_ticker(["SPY", "LMT"]),

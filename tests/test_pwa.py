@@ -14,6 +14,7 @@ import json
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 _HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(_HERE.parent))
@@ -25,7 +26,9 @@ class PwaRouteTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.client = create_app().test_client()
+        # Without start_background=False, building the app kicks off a live
+        # 36-ticker download and a scheduler that outlives the test run.
+        cls.client = create_app(start_background=False).test_client()
 
     def test_manifest_is_served_with_the_manifest_mime_type(self):
         r = self.client.get("/manifest.webmanifest")
@@ -52,10 +55,21 @@ class PwaRouteTests(unittest.TestCase):
             self.assertEqual(r.headers["Content-Type"], "image/png")
 
     def test_shortcut_targets_resolve(self):
+        """A manifest shortcut pointing at a dead route is a broken app icon.
+
+        The market fetch is stubbed out: this asserts the URLs route, and
+        letting it reach the real providers would make the suite depend on
+        outbound network access to Yahoo.
+        """
+        from app import forecast_engine
+
         m = json.loads(self.client.get("/manifest.webmanifest").data)
-        for shortcut in m.get("shortcuts", []):
-            r = self.client.get(shortcut["url"])
-            self.assertEqual(r.status_code, 200, f"dead shortcut: {shortcut['url']}")
+        with mock.patch.object(forecast_engine, "fetch_bars_with_reasons",
+                               return_value=({}, ["stubbed in tests"])):
+            for shortcut in m.get("shortcuts", []):
+                r = self.client.get(shortcut["url"])
+                self.assertEqual(r.status_code, 200,
+                                 f"dead shortcut: {shortcut['url']}")
 
     def test_service_worker_is_served_from_the_root(self):
         """Scope is bounded by the serving path — /static/sw.js could not

@@ -11,14 +11,24 @@ from app.alerts import check_alerts
 from app.data_fetcher import CACHE
 
 
-def create_app():
+def create_app(start_background=True):
+    """Build the Flask app.
+
+    ``start_background=False`` skips the startup fetch and the scheduler, which
+    is what tests want: otherwise merely constructing an app performs a live
+    36-ticker download and leaves a scheduler running for the rest of the
+    process. Production calls take the default and are unaffected.
+    """
     app = Flask(__name__, template_folder="../templates")
 
     # Initialize database
     init_db()
 
     # Register blueprints
-    from app.routes import dashboard, portfolio, analysis, alerts_api, watchlist, export, screener, backtest, stat_arb, forecast, pwa
+    from app.routes import (
+        dashboard, portfolio, analysis, alerts_api, watchlist, export,
+        screener, backtest, stat_arb, forecast, pwa,
+    )
     app.register_blueprint(pwa.bp)
     app.register_blueprint(forecast.bp)
     app.register_blueprint(dashboard.bp)
@@ -39,6 +49,7 @@ def create_app():
         fetch_history_data(30)
         start_scheduler()
 
-    threading.Thread(target=_startup, daemon=True).start()
+    if start_background:
+        threading.Thread(target=_startup, daemon=True).start()
 
     return app

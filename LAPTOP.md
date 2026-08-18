@@ -3,13 +3,19 @@
 You don't need Render. The app runs on your machine and your phone connects to
 it over your home network — and this route has one significant advantage.
 
-## Why this may fix the empty board
+## Why run it here rather than on Render
 
 Yahoo Finance aggressively throttles and blocks **datacenter IP ranges**, which
-is what a Render server has. Your home internet connection is a residential IP
-and is not treated the same way. If the deployed board comes back empty because
-Yahoo refuses the host, **the same code on your laptop will very likely just
-work.** That is the single best reason to try this path.
+is what a Render server has. Your home connection is a residential IP and is not
+treated the same way, so a board that Yahoo refuses to serve in the cloud will
+often populate fine from your laptop.
+
+That is a reason to prefer this path, not a guarantee — a residential IP does
+not help if the failure is elsewhere. The app now tries three independent price
+providers (Yahoo's chart API directly, then yfinance, then Stooq), so a single
+broken source no longer blanks the board. If it is *still* empty here, run
+`python diagnose.py` from the repo root: it exercises each provider on its own
+and names which layer is at fault.
 
 ---
 
@@ -117,7 +123,7 @@ export DATA_DIR=~/foresight-data
 |---|---|
 | Phone can't connect | Different WiFi network, or laptop firewall blocking. Check the laptop can reach `http://localhost:5000` first. |
 | Works on laptop, not phone | Firewall. macOS: System Settings → Network → Firewall → Options. Windows: allow Python on *Private networks*. |
-| Board empty on the laptop too | Run `python diagnose.py` — it prints a full report naming the cause, including yfinance's own internal log. Paste the output when reporting. |
+| Board empty on the laptop too | Run `python diagnose.py` from the repo root — it tries each of the three price providers separately and names the cause. Paste the output when reporting. |
 | No **Install app** button | Expected over plain `http://` — see Step 3. |
 | `command not found: python3` | Install Python 3.10+ from [python.org](https://www.python.org/downloads/). |
 | App stops when you close the laptop | Expected — it runs only while that terminal is open and the machine is awake. |

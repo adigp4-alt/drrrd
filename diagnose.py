@@ -13,12 +13,17 @@ an empty frame, so the calling code sees "no data" with no exception and no
 reason. That makes a blocked IP, a rate limit, an API change and a bad symbol
 all look identical from the app. This captures yfinance's own log output and
 probes each layer separately so they can be told apart.
+
+It walks up from the network to the app: DNS, then raw HTTPS to each origin,
+then each of the app's three price providers individually, then yfinance's two
+internal code paths. Because the app only needs *one* provider to work, a
+failure partway up the stack is often not a problem at all — the verdict says
+so rather than sending you after it.
 """
 
 from __future__ import annotations
 
 import io
-import json
 import logging
 import platform
 import socket
@@ -120,6 +125,44 @@ def raw_http():
     return yahoo, stooq
 
 
+def app_providers():
+    """Run the app's own providers, in the order the app tries them.
+
+    The raw probes above only show that bytes come back. These run the real
+    parsers, which is what decides whether the board populates.
+    """
+    head("APP PROVIDERS (what the board actually uses)")
+    results = {}
+    try:
+        from app import market_data
+    except Exception as exc:
+        print(f"  could not import the app: {type(exc).__name__}: {exc}")
+        print("  (run this from the repository root)")
+        return results
+
+    # The providers log their own failures, which would interleave with this
+    # report; the lines below say the same thing in one place.
+    logging.getLogger("app").setLevel(logging.CRITICAL)
+
+    for label, call in (
+        ("1. Yahoo chart API", lambda: market_data.fetch_yahoo_chart(
+            CANARY, period="1mo")),
+        ("3. Stooq", lambda: market_data.fetch_stooq(CANARY)),
+    ):
+        try:
+            started = time.time()
+            bars = call()
+            ms = round((time.time() - started) * 1000)
+            latest = bars[-1]["date"] if bars else "-"
+            print(f"  {label:<22} {len(bars)} bars  {ms}ms  latest {latest}")
+            results[label] = bool(bars)
+        except Exception as exc:
+            print(f"  {label:<22} FAILED {type(exc).__name__}: {exc}")
+            results[label] = False
+    print("  (2. yfinance is probed separately below)")
+    return results
+
+
 def yfinance_probe():
     """Call yfinance while capturing the log records it emits instead of raising."""
     head("YFINANCE")
@@ -165,35 +208,53 @@ def yfinance_probe():
     return any_ok
 
 
-def verdict(dns_ok, yahoo_ok, stooq_ok, yf_ok, outdated):
+def verdict(dns_ok, yahoo_ok, stooq_ok, yf_ok, outdated, providers):
     head("VERDICT")
-    if outdated and not yf_ok:
-        print("  A NEWER yfinance IS AVAILABLE and the installed one returned\n"
-              "  nothing. Yahoo changes its cookie/crumb handshake periodically\n"
-              "  and older yfinance then fails silently. Do this first:\n"
-              "      pip install -U yfinance\n"
-              "  then re-run this script.\n")
+    chart_ok = providers.get("1. Yahoo chart API")
+    app_stooq_ok = providers.get("3. Stooq")
+    any_provider = chart_ok or app_stooq_ok
+
     if not dns_ok:
         print("  No DNS. This machine has no working internet connection.")
-    elif yf_ok:
-        print("  yfinance IS returning data. If the board is still empty, the\n"
-              "  problem is in the app rather than the data source — report this\n"
-              "  report plus what the board's red banner says.")
-    elif yahoo_ok and not yf_ok:
-        print("  Yahoo answers fine over plain HTTPS, but yfinance returns nothing.\n"
-              "  That is a yfinance/API mismatch, not a network or IP problem.\n"
-              "  Try:  pip install -U yfinance\n"
-              "  If that fixes it, say so and the version will be pinned.")
-    elif not yahoo_ok and stooq_ok:
-        print("  Yahoo is refusing or failing for this machine, but Stooq works.\n"
-              "  The app's fallback should cover this — make sure you are running\n"
-              "  the latest code, and set MARKET_DATA_SOURCE=stooq to force it.")
-    elif not yahoo_ok and not stooq_ok:
-        print("  Neither Yahoo nor Stooq is reachable, though DNS resolves.\n"
-              "  Something between this machine and the internet is blocking\n"
-              "  HTTPS — corporate network, VPN, firewall or proxy.")
+        return
+
+    if any_provider:
+        # yfinance is the *second* of three providers now, so it failing is not
+        # a fault — say so plainly rather than sending anyone chasing it.
+        working = [n for n, ok in (("the Yahoo chart API", chart_ok),
+                                   ("Stooq", app_stooq_ok)) if ok]
+        print(f"  Market data IS reachable via {' and '.join(working)}.\n"
+              "  The board should populate. If it is still empty, the problem is\n"
+              "  in the app rather than the data — paste this report plus whatever\n"
+              "  the board's red banner says.\n")
+        if not yf_ok:
+            print("  (yfinance returned nothing, but that no longer matters: it is\n"
+                  "   the second of three providers and the app does not need it.")
+            if outdated:
+                print("   `pip install -U yfinance` would still fix it if you want\n"
+                      "   that path back.)")
+            else:
+                print("   Nothing to do.)")
+        return
+
+    # No provider works. Now the raw probes tell us which layer is at fault.
+    if outdated and not yf_ok:
+        print("  A NEWER yfinance IS AVAILABLE and the installed one returned\n"
+              "  nothing. Do this first:\n"
+              "      pip install -U yfinance\n"
+              "  then re-run this script.\n")
+
+    if yahoo_ok:
+        print("  Yahoo answers over plain HTTPS, but the app could not parse bars\n"
+              "  out of the response — Yahoo has likely changed its chart format.\n"
+              "  Paste this report; market_data.parse_yahoo_chart needs updating.")
+    elif stooq_ok:
+        print("  Yahoo is refusing this machine, but Stooq answers over raw HTTPS\n"
+              "  while the app's Stooq provider got nothing. Paste this report.")
     else:
-        print("  Inconclusive — paste the whole report.")
+        print("  Nothing is reachable, though DNS resolves. Something between this\n"
+              "  machine and the internet is blocking HTTPS — corporate network,\n"
+              "  VPN, firewall or proxy.")
 
 
 def main():
@@ -201,10 +262,11 @@ def main():
     outdated = versions()
     dns_ok = dns()
     yahoo_ok, stooq_ok = raw_http()
+    providers = app_providers()
     yf_ok = yfinance_probe()
-    verdict(dns_ok, yahoo_ok, stooq_ok, yf_ok, outdated)
+    verdict(dns_ok, yahoo_ok, stooq_ok, yf_ok, outdated, providers)
     print(f"\n{LINE}\nPaste everything above when reporting the problem.\n{LINE}")
-    return 0 if yf_ok or stooq_ok else 1
+    return 0 if any(providers.values()) else 1
 
 
 if __name__ == "__main__":

@@ -478,7 +478,7 @@ function renderBoard() {
 async function runDiagnostics() {
   const out = $("diagOut");
   if (!out) return;
-  out.innerHTML = "Probing DNS, Yahoo, the fallback source, and the parser…";
+  out.innerHTML = "Probing DNS, then each price provider in turn…";
   try {
     const d = await getJSON("/foresight/api/diagnostics");
     const v = d.verdict || {}, p = d.probes || {};
@@ -489,10 +489,16 @@ async function runDiagnostics() {
       <b>${esc(v.summary || "")}</b>
       <div class="ft-sub" style="margin:.4rem 0 .75rem"><b>Fix:</b> ${esc(v.action || "")}</div>
       <table class="ft-mini"><tbody>
-        ${row("Yahoo over HTTPS", (p.https_direct || {}).ok, (p.https_direct || {}).status_code)}
-        ${row("Stooq fallback", (p.stooq_fallback || {}).ok, ((p.stooq_fallback || {}).bars || 0) + " bars")}
-        ${row("Engine parser", (p.engine_fetch || {}).ok, ((p.engine_fetch || {}).bars || 0) + " bars")}
+        ${row("Yahoo reachable", (p.https_direct || {}).ok, (p.https_direct || {}).status_code)}
+        ${row("1. Yahoo chart API", (p.yahoo_chart_provider || {}).ok,
+              ((p.yahoo_chart_provider || {}).bars || 0) + " bars")}
+        ${row("2. yfinance", ((p.yfinance || {}).download || {}).ok ||
+                             ((p.yfinance || {}).ticker_history || {}).ok, "")}
+        ${row("3. Stooq", (p.stooq_fallback || {}).ok, ((p.stooq_fallback || {}).bars || 0) + " bars")}
+        ${row("Board fetch", (p.engine_fetch || {}).ok, ((p.engine_fetch || {}).bars || 0) + " bars")}
       </tbody></table>
+      <div class="ft-sub" style="margin-top:.5rem">Only one provider needs to
+        work — a failed row is not necessarily the problem.</div>
       <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.75rem">
         <button id="diagCopy" class="ft-btn ft-btn-ghost">Copy report</button>
         <button id="diagRetry" class="ft-btn ft-btn-ghost">Retry scan</button>

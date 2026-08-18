@@ -68,9 +68,12 @@ Pick any platform below. **Render.com is the easiest** (free tier, no credit car
 
 ---
 
-> 📘 **Step-by-step Render walkthrough: [DEPLOY.md](DEPLOY.md)** — includes
-> setting the Anthropic key and keeping the forecast accuracy history across
-> redeploys.
+> 📘 **Deploying to Render: [DEPLOY.md](DEPLOY.md)** — includes setting the
+> Anthropic key and keeping the forecast accuracy history across redeploys.
+>
+> 💻 **Running it from your own laptop: [LAPTOP.md](LAPTOP.md)** — no hosting
+> needed, and it sidesteps the Yahoo Finance datacenter-IP blocking that can
+> leave a cloud-hosted board empty.
 
 ### Option 1: Render.com (Recommended — Free)
 

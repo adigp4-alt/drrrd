@@ -46,6 +46,7 @@ import io
 import json
 import logging
 import os
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
@@ -212,14 +213,19 @@ def parse_yahoo_chart(payload, symbol: str = "") -> list[dict]:
 
 
 def fetch_yahoo_chart(ticker: str, period: str = "1y",
-                      timeout: int = YAHOO_CHART_TIMEOUT) -> list[dict]:
+                      timeout: int = YAHOO_CHART_TIMEOUT,
+                      stop: "threading.Event | None" = None) -> list[dict]:
     """Fetch daily OHLCV for one ticker straight from Yahoo's chart endpoint.
 
     Tries both query hosts before giving up. Returns ``[]`` on any failure —
     callers fall through to the next provider.
+
+    ``stop`` is a shared flag used by the batch caller to abandon a run once
+    Yahoo starts rate-limiting: continuing to hammer a host that is already
+    answering 429 makes the throttle worse and cannot succeed anyway.
     """
     symbol = (ticker or "").strip()
-    if not symbol:
+    if not symbol or (stop is not None and stop.is_set()):
         return []
 
     try:
@@ -249,6 +255,12 @@ def fetch_yahoo_chart(ticker: str, period: str = "1y",
             # 404 is the symbol's own answer, identical on both hosts.
             if response.status_code == 404:
                 return []
+            if response.status_code == 429 and stop is not None:
+                logger.warning("Yahoo is rate-limiting; abandoning the rest of "
+                               "this batch and falling through to the next "
+                               "provider")
+                stop.set()
+                return []
             continue
 
         bars = parse_yahoo_chart(response.text, symbol)
@@ -268,15 +280,21 @@ def fetch_yahoo_chart_many(tickers: list[str], period: str = "1y",
 
     The endpoint is one symbol per request, so a small thread pool keeps a
     36-ticker board from costing 36 sequential round trips.
+
+    A 429 from any ticker abandons the rest of the batch: a throttled host will
+    refuse the remainder too, and hammering it delays recovery. The tickers left
+    unfetched simply fall through to the next provider.
     """
     if not tickers:
         return {}
 
     out: dict[str, list[dict]] = {}
+    stop = threading.Event()
     workers = max(1, min(YAHOO_CHART_WORKERS, len(tickers)))
     with ThreadPoolExecutor(max_workers=workers) as pool:
         for ticker, bars in zip(tickers, pool.map(
-            lambda t: fetch_yahoo_chart(t, period=period, timeout=timeout), tickers
+            lambda t: fetch_yahoo_chart(t, period=period, timeout=timeout,
+                                        stop=stop), tickers
         )):
             if bars:
                 out[ticker] = bars

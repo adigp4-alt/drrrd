@@ -241,6 +241,39 @@ class FetchTests(unittest.TestCase):
     def test_fetch_many_handles_empty_input(self):
         self.assertEqual(market_data.fetch_yahoo_chart_many([]), {})
 
+    def test_rate_limiting_abandons_the_rest_of_the_batch(self):
+        """A throttled host refuses the remainder too — stop asking.
+
+        Without this, a 36-ticker board fires 72 requests into a host that is
+        already answering 429, which deepens the throttle and cannot succeed.
+        """
+        calls = []
+
+        def fake_get(url, **kwargs):
+            calls.append(url)
+            return self._response("", status=429)
+
+        tickers = [f"T{i}" for i in range(24)]
+        with mock.patch("requests.get", side_effect=fake_get):
+            out = market_data.fetch_yahoo_chart_many(tickers)
+
+        self.assertEqual(out, {})
+        # Far fewer than one request per ticker, let alone two hosts each.
+        self.assertLess(len(calls), len(tickers),
+                        f"kept hammering a throttled host: {len(calls)} calls")
+
+    def test_a_single_fetch_still_tries_both_hosts_on_429(self):
+        """The batch-wide stop must not change one-off behaviour."""
+        calls = []
+
+        def fake_get(url, **kwargs):
+            calls.append(url)
+            return self._response("", status=429)
+
+        with mock.patch("requests.get", side_effect=fake_get):
+            self.assertEqual(market_data.fetch_yahoo_chart("SPY"), [])
+        self.assertEqual(len(calls), 2)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

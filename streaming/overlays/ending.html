@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Thanks For Watching</title>
+<!--
+  Full-screen outro card. Leave it up for two or three minutes at the end -
+  that window is when people follow, and when a raid gets organised.
+
+  Options: title, subtitle, handle, next (e.g. "Thursday 8pm"), accent, accent2
+-->
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --accent: #7c5cff;
+    --accent2: #22d3ee;
+    --ink: #f4f4f7;
+    --dim: rgba(244, 244, 247, 0.55);
+  }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #07070c;
+    color: var(--ink);
+    font-family: "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  }
+
+  .blob {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(110px);
+    opacity: 0.45;
+  }
+  .blob.one {
+    width: 50vw; height: 50vw;
+    background: var(--accent);
+    top: -16vw; left: 50%;
+    margin-left: -25vw;
+    animation: rise 30s ease-in-out infinite alternate;
+  }
+  .blob.two {
+    width: 36vw; height: 36vw;
+    background: var(--accent2);
+    bottom: -14vw; left: -6vw;
+    animation: drift 24s ease-in-out infinite alternate;
+  }
+  @keyframes rise {
+    from { transform: translate3d(0, 0, 0) scale(1); }
+    to   { transform: translate3d(0, 8vh, 0) scale(1.18); }
+  }
+  @keyframes drift {
+    from { transform: translate3d(0, 0, 0) scale(1.05); }
+    to   { transform: translate3d(9vw, -6vh, 0) scale(0.92); }
+  }
+
+  .vignette {
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at center, transparent 32%, rgba(0,0,0,0.82) 100%);
+  }
+
+  .stage {
+    position: relative;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    gap: 2.4vh;
+  }
+
+  h1 {
+    font-size: 7vw;
+    font-weight: 800;
+    letter-spacing: -0.035em;
+    line-height: 0.95;
+    background: linear-gradient(100deg, var(--accent2) 10%, var(--ink) 45%, var(--accent) 90%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .subtitle {
+    font-size: 1.75vw;
+    color: var(--dim);
+    max-width: 48ch;
+    line-height: 1.55;
+  }
+
+  .next {
+    margin-top: 1.5vh;
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.8em;
+    padding: 0.75em 1.5em;
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 999px;
+    background: rgba(255,255,255,0.04);
+    backdrop-filter: blur(8px);
+  }
+  .next .label {
+    font-size: 1.05vw;
+    letter-spacing: 0.34em;
+    text-transform: uppercase;
+    color: var(--dim);
+  }
+  .next .value { font-size: 1.8vw; font-weight: 700; }
+
+  .handle {
+    position: absolute;
+    bottom: 4.5vh;
+    font-size: 1.5vw;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: var(--dim);
+  }
+
+  .bar {
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    height: 6px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2), var(--accent));
+    background-size: 200% 100%;
+    animation: slide 8s linear infinite;
+  }
+  @keyframes slide {
+    from { background-position: 0% 0; }
+    to   { background-position: 200% 0; }
+  }
+</style>
+</head>
+<body>
+  <div class="blob one"></div>
+  <div class="blob two"></div>
+  <div class="vignette"></div>
+
+  <div class="stage">
+    <h1 id="title">Thanks For Watching</h1>
+    <p class="subtitle" id="subtitle">If you had a good time, a follow means the world. See you next stream.</p>
+    <div class="next" id="next-wrap">
+      <span class="label">Next stream</span>
+      <span class="value" id="next">Same time, same place</span>
+    </div>
+    <div class="handle" id="handle"></div>
+  </div>
+  <div class="bar"></div>
+
+<script>
+(function () {
+  var params = new URLSearchParams(location.search);
+
+  function set(id, value) {
+    if (value) { document.getElementById(id).textContent = value; }
+  }
+
+  if (params.get('accent')) {
+    document.documentElement.style.setProperty('--accent', params.get('accent'));
+  }
+  if (params.get('accent2')) {
+    document.documentElement.style.setProperty('--accent2', params.get('accent2'));
+  }
+
+  set('title', params.get('title'));
+  set('subtitle', params.get('subtitle'));
+  set('handle', params.get('handle'));
+  set('next', params.get('next'));
+
+  if (params.get('next') === 'off') {
+    document.getElementById('next-wrap').style.display = 'none';
+  }
+})();
+</script>
+</body>
+</html>

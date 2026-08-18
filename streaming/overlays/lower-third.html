@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Lower Third</title>
+<!--
+  Transparent strip that sits over gameplay. Shows your handle, what you're
+  playing, and a rotating line of text (socials, schedule, whatever you keep
+  having to repeat in chat).
+
+  This one is deliberately small and bottom-left: most games put their own HUD
+  bottom-right and centre, and a viewer on a phone loses anything you tuck into
+  the corners at full size.
+
+  Options:
+    handle    your channel name
+    game      what you are playing
+    messages  pipe-separated rotating lines, e.g. messages=!discord|!socials
+    interval  seconds per rotating line (default 9)
+    accent, accent2
+-->
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --accent: #7c5cff;
+    --accent2: #22d3ee;
+    --ink: #f4f4f7;
+    --dim: rgba(244, 244, 247, 0.6);
+  }
+
+  /* Transparent all the way down, or OBS composites a black box over your
+     gameplay instead of the bar you designed. */
+  html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: transparent;
+    color: var(--ink);
+    font-family: "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  }
+
+  .rail {
+    position: absolute;
+    left: 40px;
+    bottom: 28px;
+    display: flex;
+    align-items: stretch;
+    gap: 14px;
+    /* Drop shadow rather than a border: it survives being placed over both a
+       bright sky and a dark cave. */
+    filter: drop-shadow(0 10px 26px rgba(0, 0, 0, 0.55));
+    animation: slide-in 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  @keyframes slide-in {
+    from { opacity: 0; transform: translateX(-24px); }
+    to   { opacity: 1; transform: none; }
+  }
+
+  /* No backdrop-filter here on purpose. OBS renders this page to a
+     transparent buffer and composites it over your gameplay afterwards, so
+     there is nothing behind the page for a backdrop filter to blur - it is a
+     no-op on stream even though it looks right in a browser. A near-solid
+     panel is what actually holds up over both a bright sky and a dark cave. */
+  .card {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 14px 22px;
+    border-radius: 14px;
+    background: rgba(10, 10, 18, 0.82);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+  }
+
+  .tick {
+    width: 5px;
+    border-radius: 3px;
+    background: linear-gradient(180deg, var(--accent2), var(--accent));
+  }
+
+  .who .handle {
+    font-size: 26px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+  }
+  .who .game {
+    font-size: 14px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--dim);
+    margin-top: 3px;
+  }
+
+  .live {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.26em;
+    text-transform: uppercase;
+    color: #ff9fb0;
+  }
+  .live i {
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    background: #ff4d6d;
+    animation: pulse 1.9s ease-out infinite;
+  }
+  @keyframes pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(255, 77, 109, 0.65); }
+    70%  { box-shadow: 0 0 0 12px rgba(255, 77, 109, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(255, 77, 109, 0); }
+  }
+
+  .ticker {
+    min-width: 320px;
+    max-width: 640px;
+    overflow: hidden;
+  }
+  .ticker .line {
+    font-size: 19px;
+    color: var(--ink);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    animation: rise 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: none; }
+  }
+</style>
+</head>
+<body>
+  <div class="rail">
+    <div class="card">
+      <div class="tick"></div>
+      <div class="who">
+        <div class="handle" id="handle">your_handle</div>
+        <div class="game" id="game">Now playing</div>
+      </div>
+      <div class="live"><i></i>Live</div>
+    </div>
+    <div class="card ticker">
+      <div class="line" id="line"></div>
+    </div>
+  </div>
+
+<script>
+(function () {
+  var params = new URLSearchParams(location.search);
+
+  if (params.get('accent')) {
+    document.documentElement.style.setProperty('--accent', params.get('accent'));
+  }
+  if (params.get('accent2')) {
+    document.documentElement.style.setProperty('--accent2', params.get('accent2'));
+  }
+
+  if (params.get('handle')) {
+    document.getElementById('handle').textContent = params.get('handle');
+  }
+  if (params.get('game')) {
+    document.getElementById('game').textContent = params.get('game');
+  }
+
+  var raw = params.get('messages');
+  var messages = raw
+    ? raw.split('|').map(function (s) { return s.trim(); }).filter(Boolean)
+    : ['Follow so you catch the next one',
+       'Say hi in chat, I read all of it',
+       'Streaming every week - schedule in the panels'];
+
+  var interval = parseFloat(params.get('interval'));
+  if (!isFinite(interval) || interval < 2) { interval = 9; }
+
+  var line = document.getElementById('line');
+  var index = 0;
+
+  function show() {
+    // Re-adding the node restarts the entry animation; simplest way to get a
+    // clean cross-fade without a second element.
+    var next = line.cloneNode(false);
+    next.textContent = messages[index % messages.length];
+    line.parentNode.replaceChild(next, line);
+    line = next;
+    index += 1;
+  }
+
+  show();
+  if (messages.length > 1) {
+    setInterval(show, interval * 1000);
+  }
+})();
+</script>
+</body>
+</html>

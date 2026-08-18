@@ -23,6 +23,8 @@ import platform
 import socket
 import time
 
+from app import market_data
+
 logger = logging.getLogger(__name__)
 
 # A liquid, long-listed symbol. If this returns nothing, the problem is the
@@ -126,8 +128,30 @@ def _yfinance_probe() -> dict:
     return results
 
 
+def _chart_probe() -> dict:
+    """Try the primary provider: Yahoo's chart endpoint, parsed by this app.
+
+    Distinct from ``_https_probe`` above, which only checks that bytes come
+    back. This runs the real parser, so it separates "Yahoo answered" from
+    "we got usable bars out of what Yahoo answered".
+    """
+    from app.market_data import fetch_yahoo_chart
+
+    try:
+        started = time.time()
+        bars = fetch_yahoo_chart(CANARY, period="1mo")
+        return {
+            "ok": bool(bars),
+            "ms": round((time.time() - started) * 1000, 1),
+            "bars": len(bars),
+            "latest": bars[-1]["date"] if bars else None,
+        }
+    except Exception as exc:
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+
+
 def _stooq_probe() -> dict:
-    """Try the fallback provider. If this works, the board can work."""
+    """Try the last-resort provider. If this works, the board can work."""
     from app.market_data import fetch_stooq, stooq_symbol
 
     try:
@@ -163,8 +187,15 @@ def _engine_probe() -> dict:
 
 
 def _verdict(dns: dict, https: dict, yfin: dict, engine: dict,
-             stooq: dict) -> dict:
-    """Turn the probe results into a cause and a recommended action."""
+             stooq: dict, chart: dict) -> dict:
+    """Turn the probe results into a cause and a recommended action.
+
+    Order matters: the engine's own fetch is the question the user is actually
+    asking ("why is my board empty?"), so a working engine is reported as
+    healthy even when a *secondary* provider is down. yfinance failing on its
+    own is no longer a fault — it is the second of three providers, and the
+    board is expected to run without it.
+    """
     resolved = any(v.get("resolved") for v in dns.values())
     if not resolved:
         return {
@@ -174,14 +205,37 @@ def _verdict(dns: dict, https: dict, yfin: dict, engine: dict,
                       "platform's egress settings.",
         }
 
-    # A working fallback changes the recommended action entirely: the board can
-    # serve data even while Yahoo refuses this host.
+    if engine.get("ok"):
+        degraded = [name for name, probe in
+                    (("Yahoo chart API", chart), ("Stooq", stooq))
+                    if not probe.get("ok")]
+        note = (f" Note: {' and '.join(degraded)} did not answer, so the board is "
+                "running on a reduced set of providers." if degraded else "")
+        return {
+            "cause": "healthy",
+            "summary": "Market data is reachable and parsing correctly.",
+            "action": "If the board is still empty, the configured tickers may be "
+                      "delisted or invalid — check the 'skipped' list on a scan."
+                      + note,
+        }
+
+    # Past this point the engine produced nothing, so name the layer that broke.
+    if chart.get("ok"):
+        return {
+            "cause": "engine_failure",
+            "summary": "Yahoo's chart API returns usable bars, but the engine's "
+                       "fetch produced nothing — so the fault is in this app, not "
+                       "in the network or the data source.",
+            "action": "Check MARKET_DATA_SOURCE (it may be pinned to a provider "
+                      "that is down) and report the 'engine_fetch' reasons below.",
+        }
+
     fallback_note = (
-        " The Stooq fallback IS working, so the board should still populate — "
-        "if it does not, redeploy to pick up the fallback."
+        " Stooq IS working, so the board should still populate — if it does not, "
+        "redeploy to pick up the fallback."
         if stooq.get("ok") else
-        " The Stooq fallback is also failing, so this host likely has no "
-        "outbound access to market data at all."
+        " Stooq is also failing, so this host likely has no outbound access to "
+        "market data at all."
     )
 
     if https.get("status_code") == 429:
@@ -209,39 +263,17 @@ def _verdict(dns: dict, https: dict, yfin: dict, engine: dict,
                       "firewall, or proxy on the host." + fallback_note,
         }
 
-    download_ok = (yfin.get("download") or {}).get("ok")
-    history_ok = (yfin.get("ticker_history") or {}).get("ok")
-
-    if https.get("ok") and not (download_ok or history_ok):
-        return {
-            "cause": "yfinance_failure",
-            "summary": "Yahoo is reachable and returns data, but yfinance produced "
-                       "nothing — most likely a library/API version mismatch.",
-            "action": "Pin or upgrade yfinance (`pip install -U yfinance`) and "
-                      "redeploy. The raw HTTPS probe above shows Yahoo itself is fine.",
-        }
-
-    if (download_ok or history_ok) and not engine.get("ok"):
-        return {
-            "cause": "parser_mismatch",
-            "summary": "yfinance returns data but the engine's parser rejected it — "
-                       "the response shape has changed.",
-            "action": "Report the 'columns' fields above; the batch-download frame "
-                      "layout no longer matches what fetch_bars expects.",
-        }
-
-    if engine.get("ok"):
-        return {
-            "cause": "healthy",
-            "summary": "Market data is reachable and parsing correctly.",
-            "action": "If the board is still empty, the configured tickers may be "
-                      "delisted or invalid — check the 'skipped' list on a scan.",
-        }
-
+    # Yahoo answers raw HTTPS but the chart provider got no bars out of it —
+    # that is a response-format change on Yahoo's side, and it is this app's
+    # parser that needs updating, not yfinance.
     return {
-        "cause": "unknown",
-        "summary": "Probes were inconclusive.",
-        "action": "Review the raw probe output below.",
+        "cause": "chart_parse_failure",
+        "summary": "Yahoo answers over HTTPS, but no usable bars could be parsed "
+                   "from its chart response — the response format has likely "
+                   "changed.",
+        "action": "Report the 'body_preview' field below; "
+                  "market_data.parse_yahoo_chart needs updating to match."
+                  + fallback_note,
     }
 
 
@@ -249,10 +281,11 @@ def run_diagnostics() -> dict:
     """Probe every layer between this process and market data."""
     dns = _dns_probe()
     https = _https_probe()
+    chart = _chart_probe()
     yfin = _yfinance_probe()
     stooq = _stooq_probe()
     engine = _engine_probe()
-    verdict = _verdict(dns, https, yfin, engine, stooq)
+    verdict = _verdict(dns, https, yfin, engine, stooq, chart)
 
     logger.info("Market data diagnostics: %s — %s", verdict["cause"],
                 verdict["summary"])
@@ -260,9 +293,11 @@ def run_diagnostics() -> dict:
     return {
         "verdict": verdict,
         "versions": _versions(),
+        "source_mode": market_data.SOURCE_MODE,
         "probes": {
             "dns": dns,
             "https_direct": https,
+            "yahoo_chart_provider": chart,
             "yfinance": yfin,
             "stooq_fallback": stooq,
             "engine_fetch": engine,

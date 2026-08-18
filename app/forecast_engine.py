@@ -61,13 +61,26 @@ def fetch_bars(tickers: list[str], period: str = HISTORY_PERIOD) -> dict[str, li
     return bars
 
 
+# Which providers each MARKET_DATA_SOURCE setting permits, in the order they
+# are tried. "chart" and "yfinance" exist to isolate one path when diagnosing.
+_PROVIDER_MODES = {
+    "auto":     ("chart", "yfinance", "stooq"),
+    "yahoo":    ("chart", "yfinance"),
+    "stooq":    ("stooq",),
+    "chart":    ("chart",),
+    "yfinance": ("yfinance",),
+}
+
+
 def fetch_bars_with_reasons(
     tickers: list[str], period: str = HISTORY_PERIOD
 ) -> tuple[dict[str, list[dict]], list[str]]:
-    """Batch-download OHLCV bars, reporting *why* anything failed.
+    """Fetch OHLCV bars from the first provider that answers, per ticker.
 
-    One `yf.download` call covers the whole list, which matters when the board
-    is 15 tickers wide and the alternative is 15 sequential HTTP round trips.
+    Providers are tried in order (see ``market_data`` for why there are three),
+    each one asked only for the tickers still missing. The direct chart API goes
+    first because it has the least that can break: no library version to drift
+    out of sync with Yahoo, and no cookie/crumb handshake to fail silently.
 
     Returns ``(bars_by_ticker, reasons)``. Failures are collected rather than
     swallowed: an empty board with no explanation is indistinguishable between a
@@ -79,114 +92,155 @@ def fetch_bars_with_reasons(
 
     unique = sorted(set(tickers))
     reasons: list[str] = []
+    providers = _PROVIDER_MODES.get(market_data.SOURCE_MODE,
+                                    _PROVIDER_MODES["auto"])
 
-    if market_data.SOURCE_MODE == "stooq":
-        return _fetch_from_stooq(unique, reasons, note="MARKET_DATA_SOURCE=stooq")
+    out: dict[str, list[dict]] = {}
+    # Only failures land here, so a clean run on the primary provider leaves it
+    # empty and the board reports nothing at all — which is what "it just
+    # worked" should look like.
+    failures: list[str] = []
 
+    for name in providers:
+        missing = [t for t in unique if t not in out]
+        if not missing:
+            break
+
+        try:
+            recovered, detail = _PROVIDERS[name](missing, period)
+        except Exception as exc:
+            recovered, detail = {}, f"{type(exc).__name__}: {exc}"
+            logger.error("Provider %s raised: %s", name, detail)
+
+        if recovered:
+            out.update(recovered)
+            # Worth saying only when an earlier provider had already failed;
+            # otherwise this is just the normal path doing its job.
+            if failures:
+                reasons.append(
+                    f"{_PROVIDER_LABELS[name]} supplied {len(recovered)} "
+                    f"ticker(s) that earlier sources could not."
+                )
+        if detail:
+            failures.append(f"{_PROVIDER_LABELS[name]}: {detail}")
+
+    missing = [t for t in unique if t not in out]
+    if not out:
+        reasons.insert(0, (
+            "No market data from any source. " + "; ".join(failures)
+            + ". Open /foresight/api/diagnostics for a per-layer breakdown."
+        ))
+    elif missing:
+        reasons.append("No data from any source for: " + ", ".join(missing[:10]))
+
+    return out, reasons
+
+
+def _fetch_chart(tickers: list[str], period: str
+                 ) -> tuple[dict[str, list[dict]], str]:
+    """Provider 1 — Yahoo's chart endpoint, called directly."""
+    out = market_data.fetch_yahoo_chart_many(tickers, period=period)
+    missing = [t for t in tickers if t not in out]
+    if not missing:
+        return out, ""
+    return out, f"no data for {len(missing)} of {len(tickers)} ticker(s)"
+
+
+def _bars_from_frame(raw, symbol: str) -> tuple[list[dict], str]:
+    """Pull one symbol's bars out of a yfinance frame.
+
+    Returns ``(bars, failure_reason)`` — exactly one of which is truthy. The
+    reason is kept because a frame that parses to nothing means a response-shape
+    change, which needs a different fix than a data outage.
+    """
+    try:
+        df = extract_symbol_frame(raw, symbol)
+        if df is None:
+            return [], f"{symbol} (not present in response)"
+        df = df.dropna(subset=["Close", "Open", "High", "Low"])
+        if df.empty:
+            return [], f"{symbol} (no rows)"
+        bars = [{
+            "date": date.strftime("%Y-%m-%d"),
+            "open": float(row["Open"]),
+            "high": float(row["High"]),
+            "low": float(row["Low"]),
+            "close": float(row["Close"]),
+            "volume": int(row["Volume"]) if pd.notna(row["Volume"]) else 0,
+        } for date, row in df.iterrows()]
+        return (bars, "") if bars else ([], f"{symbol} (no usable bars)")
+    except (KeyError, ValueError, TypeError) as exc:
+        return [], f"{symbol} ({type(exc).__name__}: {exc})"
+
+
+def _fetch_yfinance(tickers: list[str], period: str
+                    ) -> tuple[dict[str, list[dict]], str]:
+    """Provider 2 — yfinance's batch download.
+
+    Kept behind the direct chart call because this is the path that breaks when
+    Yahoo changes its handshake or yfinance changes its response shape, but it
+    carries retry and session handling that sometimes succeeds anyway.
+    """
     raw = None
-    yahoo_error = None
     try:
         raw = yf.download(
-            " ".join(unique), period=period, group_by="ticker",
+            " ".join(tickers), period=period, group_by="ticker",
             progress=False, auto_adjust=False, threads=True,
         )
     except Exception as exc:
-        yahoo_error = f"{type(exc).__name__}: {exc}"
-        logger.error("Yahoo download failed: %s", yahoo_error)
+        detail = f"{type(exc).__name__}: {exc}"
+        logger.error("yfinance download failed: %s", detail)
+        return {}, detail
 
     if raw is None or raw.empty:
-        detail = yahoo_error or "empty response"
-        logger.warning("Yahoo returned no usable data (%s)", detail)
-        if market_data.SOURCE_MODE == "yahoo":
-            return {}, [
-                f"Yahoo Finance returned no data ({detail}). This is usually the "
-                "host's IP being blocked or rate-limited — open "
-                "/foresight/api/diagnostics for the exact cause."
-            ]
-        return _fetch_from_stooq(
-            unique, reasons,
-            note=f"Yahoo Finance returned no data ({detail})",
-        )
+        # yfinance reports most failures by logging them and returning an empty
+        # frame, so there is nothing more specific to say here.
+        return {}, "empty response"
 
     out: dict[str, list[dict]] = {}
     parse_failures = []
-    for symbol in unique:
-        try:
-            df = extract_symbol_frame(raw, symbol)
-            if df is None:
-                parse_failures.append(f"{symbol} (not present in response)")
-                continue
-            df = df.dropna(subset=["Close", "Open", "High", "Low"])
-            if df.empty:
-                parse_failures.append(f"{symbol} (no rows)")
-                continue
-            bars = []
-            for date, row in df.iterrows():
-                bars.append({
-                    "date": date.strftime("%Y-%m-%d"),
-                    "open": float(row["Open"]),
-                    "high": float(row["High"]),
-                    "low": float(row["Low"]),
-                    "close": float(row["Close"]),
-                    "volume": int(row["Volume"]) if pd.notna(row["Volume"]) else 0,
-                })
-            if bars:
-                out[symbol] = bars
-            else:
-                parse_failures.append(f"{symbol} (no usable bars)")
-        except (KeyError, ValueError, TypeError) as exc:
-            parse_failures.append(f"{symbol} ({type(exc).__name__}: {exc})")
+    for symbol in tickers:
+        bars, failure = _bars_from_frame(raw, symbol)
+        if bars:
+            out[symbol] = bars
+        else:
+            parse_failures.append(failure)
 
-    if parse_failures:
-        logger.warning("Could not parse bars for: %s", ", ".join(parse_failures[:10]))
-        # Yahoo returning a populated frame that yields *nothing* points at a
-        # response-shape change, not a data outage. Keep that signal — it is the
-        # difference between "upgrade yfinance" and "Yahoo is blocking you".
-        if not out:
-            reasons.append(
-                "Yahoo returned a response but no ticker could be parsed from it, "
-                "which usually means a yfinance version change. First failures: "
-                + ", ".join(parse_failures[:5])
-            )
+    if not parse_failures:
+        return out, ""
 
-    # Anything Yahoo could not supply, try the fallback provider for. This also
-    # covers the case where Yahoo serves a frame but omits most tickers.
-    missing = [t for t in unique if t not in out]
-    if missing and market_data.SOURCE_MODE != "yahoo":
-        recovered = market_data.fetch_stooq_many(missing)
-        if recovered:
-            out.update(recovered)
-            reasons.append(
-                f"Yahoo had no data for {len(missing)} ticker(s); "
-                f"{len(recovered)} recovered from Stooq."
-            )
-        still_missing = [t for t in missing if t not in out]
-        if still_missing:
-            reasons.append("No data from any source for: "
-                           + ", ".join(still_missing[:10]))
-    elif missing:
-        reasons.append("No data for: " + ", ".join(missing[:10]))
-
-    return out, reasons
+    logger.warning("Could not parse bars for: %s", ", ".join(parse_failures[:10]))
+    # A populated frame that yields *nothing* points at a response-shape change,
+    # not a data outage. Keep that signal — it is the difference between
+    # "upgrade yfinance" and "Yahoo is blocking you".
+    if not out:
+        return out, ("returned a response but nothing could be parsed from it, "
+                     "which usually means a yfinance version change (" +
+                     ", ".join(parse_failures[:3]) + ")")
+    return out, f"could not parse {len(parse_failures)} ticker(s)"
 
 
-def _fetch_from_stooq(tickers: list[str], reasons: list[str], note: str
-                      ) -> tuple[dict[str, list[dict]], list[str]]:
-    """Fetch the whole list from the fallback provider."""
-    logger.info("Falling back to Stooq for %d ticker(s): %s", len(tickers), note)
+def _fetch_stooq(tickers: list[str], period: str
+                 ) -> tuple[dict[str, list[dict]], str]:
+    """Provider 3 — Stooq, a different origin entirely."""
     out = market_data.fetch_stooq_many(tickers)
-    if out:
-        reasons.append(f"{note}; served {len(out)} ticker(s) from Stooq instead.")
-    else:
-        reasons.append(
-            f"{note}, and the Stooq fallback returned nothing either. This host "
-            "may have no outbound access to market data — open "
-            "/foresight/api/diagnostics for the exact cause."
-        )
     missing = [t for t in tickers if t not in out]
-    if out and missing:
-        reasons.append("No data from any source for: " + ", ".join(missing[:10]))
-    return out, reasons
+    if not missing:
+        return out, ""
+    return out, f"no data for {len(missing)} of {len(tickers)} ticker(s)"
+
+
+_PROVIDERS = {
+    "chart": _fetch_chart,
+    "yfinance": _fetch_yfinance,
+    "stooq": _fetch_stooq,
+}
+
+_PROVIDER_LABELS = {
+    "chart": "Yahoo chart API",
+    "yfinance": "yfinance",
+    "stooq": "Stooq",
+}
 
 
 def _blend(prior, tilt) -> dict:

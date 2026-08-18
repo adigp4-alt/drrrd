@@ -105,7 +105,7 @@ Open `/foresight` and:
 | Symptom | Cause and fix |
 |---|---|
 | First visit hangs ~30s | Free-plan cold start. Normal. |
-| Board is empty after a scan | Yahoo Finance returned nothing. Check the service logs for `yfinance` errors. |
+| Board is empty after a scan | All three price providers failed. Open `/foresight/api/diagnostics` on the deployed URL — it probes each layer and names the cause. Yahoo throttles datacenter IPs hard, so `MARKET_DATA_SOURCE=stooq` is the usual workaround on a cloud host. |
 | **quant-only mode** badge | `ANTHROPIC_API_KEY` is not set — see Step 2. |
 | Accuracy tab empty after redeploy | Storage is ephemeral — see Step 3. |
 | Scan times out | Gunicorn's timeout is already raised to 300s in `render.yaml`. If you changed the start command, put `--timeout 300` back; catalyst scans run web research and exceed the 30s default. |

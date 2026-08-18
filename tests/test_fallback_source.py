@@ -164,8 +164,16 @@ class FetchTests(unittest.TestCase):
 class FailoverTests(unittest.TestCase):
     """The engine must switch providers on its own when Yahoo yields nothing."""
 
-    def _run(self, yahoo_result, stooq_map, mode="auto"):
+    def _run(self, yahoo_result, stooq_map, mode="auto", chart_map=None):
+        """Drive the engine with every provider stubbed.
+
+        ``chart_map`` defaults to empty, which is the interesting case for these
+        tests: the primary provider finds nothing and the chain has to carry on
+        to the ones behind it.
+        """
         from app import forecast_engine
+
+        chart_map = chart_map or {}
 
         class FakeYF:
             @staticmethod
@@ -176,6 +184,10 @@ class FailoverTests(unittest.TestCase):
 
         with mock.patch.object(forecast_engine, "yf", FakeYF), \
              mock.patch.object(market_data, "SOURCE_MODE", mode), \
+             mock.patch.object(market_data, "fetch_yahoo_chart_many",
+                               side_effect=lambda t, **k: {
+                                   x: chart_map[x] for x in t if x in chart_map
+                               }), \
              mock.patch.object(market_data, "fetch_stooq_many",
                                side_effect=lambda t, **k: {
                                    x: stooq_map[x] for x in t if x in stooq_map
@@ -206,7 +218,7 @@ class FailoverTests(unittest.TestCase):
         raw.columns = pd.MultiIndex.from_tuples(raw.columns)
         bars, reasons = self._run(raw, {"LMT": self._bars()})
         self.assertEqual(set(bars), {"SPY", "LMT"})
-        self.assertTrue(any("recovered from Stooq" in r for r in reasons))
+        self.assertTrue(any("Stooq supplied" in r for r in reasons))
 
     def test_both_sources_failing_explains_itself(self):
         """The one thing that must never happen again: silence."""
@@ -227,6 +239,112 @@ class FailoverTests(unittest.TestCase):
             {"SPY": self._bars(), "LMT": self._bars()}, mode="stooq",
         )
         self.assertEqual(set(bars), {"SPY", "LMT"})
+
+
+class ProviderOrderTests(unittest.TestCase):
+    """The chart API must come first, and yfinance must stop being a hard dep.
+
+    This is the whole point of the three-provider chain: when yfinance's Yahoo
+    session breaks — which it does whenever Yahoo changes its cookie/crumb
+    handshake — the board has to keep working without it.
+    """
+
+    def _bars(self):
+        return market_data.parse_stooq_csv(STOOQ_CSV)
+
+    def _run(self, mode="auto", chart_map=None, stooq_map=None, yf_impl=None):
+        from app import forecast_engine
+
+        chart_map = chart_map or {}
+        stooq_map = stooq_map or {}
+
+        class FakeYF:
+            @staticmethod
+            def download(*args, **kwargs):
+                if yf_impl is None:
+                    return pd.DataFrame()
+                return yf_impl()
+
+        with mock.patch.object(forecast_engine, "yf", FakeYF), \
+             mock.patch.object(market_data, "SOURCE_MODE", mode), \
+             mock.patch.object(market_data, "fetch_yahoo_chart_many",
+                               side_effect=lambda t, **k: {
+                                   x: chart_map[x] for x in t if x in chart_map
+                               }), \
+             mock.patch.object(market_data, "fetch_stooq_many",
+                               side_effect=lambda t, **k: {
+                                   x: stooq_map[x] for x in t if x in stooq_map
+                               }):
+            return forecast_engine.fetch_bars_with_reasons(["SPY", "LMT"])
+
+    def test_chart_api_success_never_reaches_yfinance(self):
+        """yfinance is not called at all when the chart API answers."""
+        def explode():
+            raise AssertionError("yfinance must not be called when chart works")
+
+        bars, reasons = self._run(
+            chart_map={"SPY": self._bars(), "LMT": self._bars()},
+            yf_impl=explode,
+        )
+        self.assertEqual(set(bars), {"SPY", "LMT"})
+
+    def test_a_clean_primary_run_reports_nothing(self):
+        """Success is silent — no reasons for the UI to show."""
+        bars, reasons = self._run(
+            chart_map={"SPY": self._bars(), "LMT": self._bars()})
+        self.assertEqual(reasons, [])
+
+    def test_board_survives_a_totally_broken_yfinance(self):
+        """The exact production failure: yfinance raising, chart API fine."""
+        def explode():
+            raise RuntimeError("Failed to get ticker 'SPY' reason: crumb")
+
+        bars, _ = self._run(
+            chart_map={"SPY": self._bars(), "LMT": self._bars()},
+            yf_impl=explode,
+        )
+        self.assertEqual(set(bars), {"SPY", "LMT"})
+
+    def test_chart_gap_is_topped_up_by_later_providers(self):
+        bars, reasons = self._run(chart_map={"SPY": self._bars()},
+                                  stooq_map={"LMT": self._bars()})
+        self.assertEqual(set(bars), {"SPY", "LMT"})
+        self.assertTrue(any("Stooq supplied" in r for r in reasons))
+
+    def test_chart_only_mode_isolates_the_provider(self):
+        bars, _ = self._run(
+            mode="chart",
+            chart_map={"SPY": self._bars()},
+            stooq_map={"LMT": self._bars()},
+            yf_impl=lambda: (_ for _ in ()).throw(
+                AssertionError("yfinance must not be called in chart mode")),
+        )
+        self.assertEqual(set(bars), {"SPY"})
+
+    def test_a_provider_raising_does_not_take_down_the_chain(self):
+        """One provider blowing up must not lose the tickers the others have."""
+        from app import forecast_engine
+
+        with mock.patch.object(market_data, "SOURCE_MODE", "auto"), \
+             mock.patch.object(market_data, "fetch_yahoo_chart_many",
+                               side_effect=OSError("TLS handshake failed")), \
+             mock.patch.object(market_data, "fetch_stooq_many",
+                               side_effect=lambda t, **k: {
+                                   x: self._bars() for x in t}), \
+             mock.patch.object(forecast_engine, "yf", mock.Mock(
+                 download=mock.Mock(return_value=pd.DataFrame()))):
+            bars, reasons = forecast_engine.fetch_bars_with_reasons(["SPY"])
+
+        self.assertEqual(set(bars), {"SPY"})
+        self.assertTrue(any("Stooq supplied" in r for r in reasons))
+
+    def test_every_provider_failing_names_every_provider(self):
+        bars, reasons = self._run()
+        self.assertEqual(bars, {})
+        joined = " ".join(reasons)
+        for label in ("Yahoo chart API", "yfinance", "Stooq"):
+            self.assertIn(label, joined)
+        self.assertIn("diagnostics", joined)
 
 
 if __name__ == "__main__":

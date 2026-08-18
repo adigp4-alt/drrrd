@@ -33,16 +33,45 @@ def head(title):
     print(f"\n{LINE}\n{title}\n{LINE}")
 
 
+def yfinance_is_outdated():
+    """Report whether a newer yfinance exists.
+
+    Yahoo periodically changes the cookie/crumb handshake, which breaks the
+    installed yfinance until it is updated — and the symptom is an empty frame
+    with no error, so it is invisible from the app. Checking PyPI turns that
+    into a one-line answer.
+    """
+    try:
+        import json as _json
+        import urllib.request
+        import yfinance as yf
+        with urllib.request.urlopen(
+            "https://pypi.org/pypi/yfinance/json", timeout=10
+        ) as response:
+            latest = _json.load(response)["info"]["version"]
+        installed = yf.__version__
+        if latest != installed:
+            print(f"  yfinance      {installed}  ->  {latest} AVAILABLE  "
+                  f"(pip install -U yfinance)")
+            return True
+        print(f"  yfinance      {installed}  (latest)")
+        return False
+    except Exception:
+        return None
+
+
 def versions():
     head("VERSIONS")
     print(f"  python        {platform.python_version()}  ({platform.system()} "
           f"{platform.machine()})")
-    for name in ("yfinance", "pandas", "numpy", "requests", "curl_cffi"):
+    outdated = yfinance_is_outdated()
+    for name in ("pandas", "numpy", "requests", "curl_cffi"):
         try:
             mod = __import__(name)
             print(f"  {name:<13} {getattr(mod, '__version__', 'unknown')}")
         except Exception as exc:
             print(f"  {name:<13} NOT INSTALLED ({type(exc).__name__})")
+    return outdated
 
 
 def dns():
@@ -136,8 +165,14 @@ def yfinance_probe():
     return any_ok
 
 
-def verdict(dns_ok, yahoo_ok, stooq_ok, yf_ok):
+def verdict(dns_ok, yahoo_ok, stooq_ok, yf_ok, outdated):
     head("VERDICT")
+    if outdated and not yf_ok:
+        print("  A NEWER yfinance IS AVAILABLE and the installed one returned\n"
+              "  nothing. Yahoo changes its cookie/crumb handshake periodically\n"
+              "  and older yfinance then fails silently. Do this first:\n"
+              "      pip install -U yfinance\n"
+              "  then re-run this script.\n")
     if not dns_ok:
         print("  No DNS. This machine has no working internet connection.")
     elif yf_ok:
@@ -163,11 +198,11 @@ def verdict(dns_ok, yahoo_ok, stooq_ok, yf_ok):
 
 def main():
     print("ForesightTape market-data diagnostic")
-    versions()
+    outdated = versions()
     dns_ok = dns()
     yahoo_ok, stooq_ok = raw_http()
     yf_ok = yfinance_probe()
-    verdict(dns_ok, yahoo_ok, stooq_ok, yf_ok)
+    verdict(dns_ok, yahoo_ok, stooq_ok, yf_ok, outdated)
     print(f"\n{LINE}\nPaste everything above when reporting the problem.\n{LINE}")
     return 0 if yf_ok or stooq_ok else 1
 

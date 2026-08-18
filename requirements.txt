@@ -1,6 +1,9 @@
 Flask>=2.3.2
 APScheduler>=3.10.4
-yfinance>=0.2.28
+# 1.6.0 (2026-08-13) — Yahoo periodically changes the cookie/crumb handshake
+# and older yfinance then returns empty frames rather than erroring. Floor it
+# so a fresh install cannot land on a version that is already broken.
+yfinance>=1.6.0
 pandas>=2.0.3
 gunicorn>=21.2.0
 openpyxl>=3.1.2

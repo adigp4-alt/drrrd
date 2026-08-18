@@ -275,5 +275,44 @@ class FetchTests(unittest.TestCase):
         self.assertEqual(len(calls), 2)
 
 
+class DeploymentIdentityTests(unittest.TestCase):
+    """The running build has to be able to say what it is.
+
+    "I redeployed and it still doesn't work" is ambiguous between "the fix
+    failed" and "the fix isn't running", and from outside the two look the same.
+    """
+
+    def _deployment(self):
+        from app import forecast_diagnostics
+        return forecast_diagnostics._deployment()
+
+    def test_reports_the_provider_chain_this_build_supports(self):
+        """The tell for a stale deploy: no 'chart' in the provider list."""
+        providers = self._deployment().get("providers", [])
+        self.assertIn("chart", providers)
+        self.assertIn("stooq", providers)
+
+    def test_reports_the_configured_source_mode(self):
+        with mock.patch.object(market_data, "SOURCE_MODE", "stooq"):
+            self.assertEqual(self._deployment().get("source_mode"), "stooq")
+
+    def test_picks_up_the_hosts_commit_when_it_supplies_one(self):
+        with mock.patch.dict("os.environ", {"RENDER_GIT_COMMIT": "abc1234",
+                                            "RENDER_GIT_BRANCH": "some-branch"}):
+            dep = self._deployment()
+        self.assertEqual(dep["commit"], "abc1234")
+        self.assertEqual(dep["branch"], "some-branch")
+
+    def test_empty_fields_are_omitted_rather_than_reported_blank(self):
+        dep = self._deployment()
+        self.assertNotIn("", dep.values())
+
+    def test_never_raises(self):
+        """This runs inside the endpoint people hit when things are broken."""
+        with mock.patch("subprocess.run", side_effect=OSError("no git")), \
+             mock.patch.dict("os.environ", {}, clear=True):
+            self.assertIsInstance(self._deployment(), dict)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

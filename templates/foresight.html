@@ -1,175 +1,330 @@
 {% extends "base.html" %}
 {% block title %}ForesightTape — Next-Session Forecasts{% endblock %}
 
+{% block head %}
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0B0F19">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+{% endblock %}
+
 {% block style %}
-/* Ticker tape */
-.ft-tape-wrap { overflow: hidden; white-space: nowrap; background: rgba(0,0,0,0.45);
-    border: 1px solid var(--border-color); border-radius: 10px; margin-bottom: 1.5rem; }
-.ft-tape { display: inline-block; padding: 0.45rem 0; animation: ft-scroll 40s linear infinite; }
-.ft-tape:hover { animation-play-state: paused; }
+/* ===================================================================
+   ForesightTape — mobile-first forecast board
+
+   Colour: bull / bear are a *diverging* pair, not decoration. The obvious
+   green/red fails deuteranopia separation (OKLab CVD dE 5.6 — roughly 8% of
+   men could not tell the two tiles apart), so the poles are the validated
+   aqua/orange pair (dE 9.4 deutan, 26.5 normal-vision, both >= 3:1 on this
+   surface). Doji is the neutral midpoint and is legitimately grey.
+   Direction is never carried by colour alone: every state also ships an
+   arrow glyph and a written label.
+   =================================================================== */
+:root {
+  --ft-bull:        #199e70;
+  --ft-bull-soft:   rgba(25, 158, 112, 0.16);
+  --ft-bull-line:   rgba(25, 158, 112, 0.42);
+  --ft-bear:        #d95926;
+  --ft-bear-soft:   rgba(217, 89, 38, 0.16);
+  --ft-bear-line:   rgba(217, 89, 38, 0.42);
+  --ft-doji:        #9a9a94;
+  --ft-doji-soft:   rgba(154, 154, 148, 0.12);
+  --ft-doji-line:   rgba(154, 154, 148, 0.30);
+
+  --ft-surface:     rgba(255, 255, 255, 0.035);
+  --ft-surface-2:   rgba(255, 255, 255, 0.06);
+  --ft-line:        rgba(255, 255, 255, 0.09);
+  --ft-ink:         #F5F7FA;
+  --ft-ink-2:       #A8B0BD;
+  --ft-ink-3:       #6E7683;
+  --ft-accent:      #7C8CFF;
+
+  --ft-r:           16px;
+  --ft-r-sm:        10px;
+  --ft-tap:         44px;   /* minimum comfortable touch target */
+}
+
+.ft { max-width: 1120px; margin: 0 auto; padding-bottom: 5.5rem; }
+.ft *, .ft *::before, .ft *::after { box-sizing: border-box; }
+
+/* Tabular figures everywhere numbers are compared down a column. */
+.ft-num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  letter-spacing: -0.01em;
+}
+
+/* ---------- header ---------- */
+.ft-head { display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
+.ft-title { font-size: clamp(1.5rem, 5vw, 2rem); font-weight: 700;
+  letter-spacing: -0.03em; margin: 0; line-height: 1.1; }
+.ft-title span { background: linear-gradient(120deg, #7C8CFF, #C4A2FF);
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+.ft-sub { color: var(--ft-ink-2); font-size: 0.875rem; line-height: 1.5;
+  margin: 0.4rem 0 0; max-width: 58ch; }
+
+/* ---------- ticker tape ---------- */
+.ft-tape { overflow: hidden; white-space: nowrap; border: 1px solid var(--ft-line);
+  border-radius: var(--ft-r-sm); background: rgba(0,0,0,0.28); margin-bottom: 1.25rem;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent); }
+.ft-tape-track { display: inline-block; padding: 0.5rem 0; animation: ft-scroll 48s linear infinite; }
+.ft-tape:hover .ft-tape-track, .ft-tape:focus-within .ft-tape-track { animation-play-state: paused; }
 @keyframes ft-scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
-@media (prefers-reduced-motion: reduce) { .ft-tape { animation: none; } }
-.ft-tape .chip { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0 1.1rem;
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.8rem; }
+@media (prefers-reduced-motion: reduce) {
+  .ft-tape-track { animation: none; }
+  .ft-tape { overflow-x: auto; }
+}
+.ft-chip { display: inline-flex; align-items: baseline; gap: 0.4rem; padding: 0 0.9rem;
+  font-size: 0.8rem; }
+.ft-chip b { font-weight: 650; color: var(--ft-ink); }
 
-/* Heatmap tiles */
-.ft-tile { border-radius: 12px; padding: 0.9rem 1rem; border: 1px solid rgba(255,255,255,0.06);
-    height: 100%; cursor: default; transition: transform 0.15s ease; }
-.ft-tile:hover { transform: translateY(-2px); }
-.ft-bull-hi  { background: rgba(16,185,129,0.32); }
-.ft-bull-md  { background: rgba(16,185,129,0.18); }
-.ft-bull-lo  { background: rgba(16,185,129,0.09); }
-.ft-bear-hi  { background: rgba(244,63,94,0.32); }
-.ft-bear-md  { background: rgba(244,63,94,0.18); }
-.ft-bear-lo  { background: rgba(244,63,94,0.09); }
-.ft-doji     { background: rgba(148,163,184,0.10); }
+/* ---------- controls ---------- */
+.ft-actions { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
+.ft-btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+  min-height: var(--ft-tap); padding: 0 1.15rem; border-radius: 999px; border: 1px solid transparent;
+  font-size: 0.9rem; font-weight: 600; cursor: pointer; transition: transform .15s, filter .15s;
+  background: linear-gradient(135deg, #5B6BFF, #8B5CF6); color: #fff; }
+.ft-btn:hover:not(:disabled) { filter: brightness(1.1); transform: translateY(-1px); }
+.ft-btn:active:not(:disabled) { transform: translateY(0); }
+.ft-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.ft-btn-ghost { background: var(--ft-surface-2); color: var(--ft-ink); border-color: var(--ft-line); }
+.ft-btn-ghost:hover:not(:disabled) { background: rgba(255,255,255,0.1); filter: none; }
+.ft-switch { display: inline-flex; align-items: center; gap: 0.5rem; min-height: var(--ft-tap);
+  color: var(--ft-ink-2); font-size: 0.85rem; cursor: pointer; user-select: none; }
+.ft-switch input { width: 2.4rem; height: 1.4rem; accent-color: var(--ft-accent); cursor: pointer; }
 
-.ft-mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-.ft-muted { color: #94A3B8; }
-.ft-small { font-size: 0.78rem; }
+/* ---------- cards ---------- */
+.ft-card { background: var(--ft-surface); border: 1px solid var(--ft-line);
+  border-radius: var(--ft-r); padding: 1.1rem; }
+.ft-card + .ft-card { margin-top: 0.85rem; }
+.ft-empty { text-align: center; color: var(--ft-ink-2); padding: 2.75rem 1.25rem;
+  border: 1px dashed var(--ft-line); border-radius: var(--ft-r); font-size: 0.9rem; line-height: 1.6; }
 
-/* Probability bar */
-.ft-pbar { height: 6px; border-radius: 3px; background: rgba(255,255,255,0.08);
-    overflow: hidden; position: relative; }
-.ft-pbar > div { height: 100%; }
-.ft-pbar .mid { position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px;
-    background: rgba(255,255,255,0.35); }
+/* ---------- forecast row (works as a list at every width) ---------- */
+.ft-rows { display: flex; flex-direction: column; gap: 0.5rem; }
+.ft-row { display: grid; gap: 0.15rem 0.9rem; align-items: center; padding: 0.85rem 0.95rem;
+  background: var(--ft-surface); border: 1px solid var(--ft-line); border-left-width: 3px;
+  border-radius: var(--ft-r-sm); transition: background .15s;
+  grid-template-columns: 1fr auto; grid-template-areas: "id move" "bar bar" "why why"; }
+.ft-row:hover { background: var(--ft-surface-2); }
+.ft-row[data-dir="bull"] { border-left-color: var(--ft-bull-line); }
+.ft-row[data-dir="bear"] { border-left-color: var(--ft-bear-line); }
+.ft-row[data-dir="doji"] { border-left-color: var(--ft-doji-line); }
 
-th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
-th.sortable:hover { color: #F8FAFC; }
-.ft-table td { font-size: 0.88rem; padding: 0.7rem 0.75rem !important; }
-.ft-badge-src { font-size: 0.65rem; letter-spacing: 0.5px; }
+.ft-id { grid-area: id; min-width: 0; }
+.ft-tick { font-weight: 700; font-size: 1rem; letter-spacing: -0.01em; }
+.ft-name { color: var(--ft-ink-3); font-size: 0.75rem; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+.ft-move { grid-area: move; text-align: right; }
+.ft-move-v { font-size: 1.05rem; font-weight: 700; }
+.ft-move-s { color: var(--ft-ink-3); font-size: 0.7rem; }
+.ft-why { grid-area: why; color: var(--ft-ink-2); font-size: 0.78rem; line-height: 1.45;
+  margin-top: 0.35rem; }
+
+/* Diverging probability bar, anchored at the 50% coin-flip midpoint. The
+   distance from centre *is* the claimed edge, so a near-flat bar reads as
+   "no edge" at a glance rather than needing the number parsed. */
+.ft-bar { grid-area: bar; position: relative; height: 8px; border-radius: 4px;
+  background: var(--ft-doji-soft); margin-top: 0.55rem;
+  /* Guides at 40 / 60% give the eye a scale, so a short fill reads as
+     "small edge" rather than "small bar". */
+  background-image: linear-gradient(90deg, transparent calc(40% - 1px),
+    rgba(255,255,255,0.10) calc(40% - 1px), rgba(255,255,255,0.10) 40%,
+    transparent 40%, transparent calc(60% - 1px),
+    rgba(255,255,255,0.10) calc(60% - 1px), rgba(255,255,255,0.10) 60%, transparent 60%); }
+.ft-bar i { position: absolute; top: 0; bottom: 0; display: block; border-radius: 3px;
+  min-width: 3px; }
+.ft-bar::after { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px;
+  width: 1px; background: rgba(255,255,255,0.45); }
+
+.ft-badge { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.15rem 0.5rem;
+  border-radius: 6px; font-size: 0.68rem; font-weight: 650; letter-spacing: 0.02em; }
+.ft-b-bull { background: var(--ft-bull-soft); color: var(--ft-bull); }
+.ft-b-bear { background: var(--ft-bear-soft); color: var(--ft-bear); }
+.ft-b-doji { background: var(--ft-doji-soft); color: var(--ft-doji); }
+
+@media (min-width: 720px) {
+  .ft-row { grid-template-columns: 13rem minmax(0, 26rem) 1fr;
+    grid-template-areas: "id bar move" "why why why"; gap: 0.3rem 1.25rem; }
+  .ft-bar { margin-top: 0; }
+  .ft-move { text-align: left; }
+  .ft-why { margin-top: 0.5rem; }
+  /* Only the primary tab bar stretches; sort chips size to their labels. */
+  .ft-tabs { max-width: 34rem; }
+  #boardSort .ft-tab { flex: 0 0 auto; }
+}
+#boardSort .ft-tab { flex: 0 0 auto; }
+
+/* ---------- heatmap ---------- */
+.ft-grid { display: grid; gap: 0.5rem; grid-template-columns: repeat(2, 1fr); }
+@media (min-width: 560px) { .ft-grid { grid-template-columns: repeat(3, 1fr); } }
+@media (min-width: 860px) { .ft-grid { grid-template-columns: repeat(4, 1fr); } }
+.ft-tile { border-radius: var(--ft-r-sm); padding: 0.8rem; border: 1px solid var(--ft-line);
+  min-height: 92px; display: flex; flex-direction: column; justify-content: space-between; }
+.ft-tile-top { display: flex; align-items: baseline; justify-content: space-between; gap: 0.4rem; }
+
+/* ---------- stat tiles ---------- */
+.ft-stats { display: grid; gap: 0.6rem; grid-template-columns: repeat(2, 1fr); }
+@media (min-width: 700px) { .ft-stats { grid-template-columns: repeat(4, 1fr); } }
+.ft-stat { background: var(--ft-surface); border: 1px solid var(--ft-line);
+  border-radius: var(--ft-r-sm); padding: 0.9rem; }
+.ft-stat-v { font-size: clamp(1.35rem, 5vw, 1.75rem); font-weight: 700; letter-spacing: -0.02em; }
+.ft-stat-l { color: var(--ft-ink-3); font-size: 0.7rem; text-transform: uppercase;
+  letter-spacing: 0.06em; font-weight: 600; margin-top: 0.15rem; }
+
+/* ---------- tabs: top on desktop, thumb-reachable bar on phones ---------- */
+.ft-tabs { display: flex; gap: 0.25rem; padding: 0.25rem; background: var(--ft-surface);
+  border: 1px solid var(--ft-line); border-radius: 999px; margin-bottom: 1.1rem;
+  overflow-x: auto; scrollbar-width: none; }
+.ft-tabs::-webkit-scrollbar { display: none; }
+.ft-tab { flex: 1 0 auto; min-height: 38px; padding: 0 1rem; border: 0; border-radius: 999px;
+  background: transparent; color: var(--ft-ink-2); font-size: 0.85rem; font-weight: 600;
+  cursor: pointer; white-space: nowrap; transition: background .15s, color .15s; }
+.ft-tab[aria-selected="true"] { background: var(--ft-surface-2); color: var(--ft-ink); }
+
+@media (max-width: 719px) {
+  .ft-tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 1030; margin: 0;
+    border-radius: 0; border-width: 1px 0 0; padding: 0.3rem 0.4rem;
+    padding-bottom: calc(0.3rem + env(safe-area-inset-bottom));
+    background: rgba(11, 15, 25, 0.94); backdrop-filter: blur(16px); }
+  .ft-tab { min-height: var(--ft-tap); font-size: 0.78rem; padding: 0 0.5rem; }
+}
+
+.ft-status { border-radius: var(--ft-r-sm); padding: 0.85rem 1rem; font-size: 0.85rem;
+  line-height: 1.55; margin-bottom: 1rem; border: 1px solid; }
+.ft-status-info   { background: rgba(124,140,255,0.10); border-color: rgba(124,140,255,0.35); color: #C3CBFF; }
+.ft-status-ok     { background: var(--ft-bull-soft);    border-color: var(--ft-bull-line);    color: #6FD9B0; }
+.ft-status-err    { background: var(--ft-bear-soft);    border-color: var(--ft-bear-line);    color: #F0A183; }
+
+.ft-sec { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--ft-ink-3); font-weight: 650; margin: 1.5rem 0 0.6rem; }
+.ft-sec:first-child { margin-top: 0; }
+.ft-foot { color: var(--ft-ink-3); font-size: 0.78rem; line-height: 1.6;
+  margin-top: 2rem; padding-top: 1.1rem; border-top: 1px solid var(--ft-line); }
+.ft-input { width: 100%; min-height: var(--ft-tap); background: rgba(0,0,0,0.3);
+  border: 1px solid var(--ft-line); border-radius: var(--ft-r-sm); padding: 0 1rem;
+  color: var(--ft-ink); font-size: 1rem; }
+.ft-input:focus { outline: 2px solid var(--ft-accent); outline-offset: -1px; }
+.ft-mini { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+.ft-mini th { text-align: left; color: var(--ft-ink-3); font-weight: 600; font-size: 0.68rem;
+  text-transform: uppercase; letter-spacing: 0.05em; padding: 0.5rem 0.4rem; }
+.ft-mini td { padding: 0.55rem 0.4rem; border-top: 1px solid var(--ft-line); }
+.ft-scroll { overflow-x: auto; }
+.ft-sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
 {% endblock %}
 
 {% block content %}
-<div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
+<div class="ft">
+
+  <header class="ft-head">
     <div>
-        <h2 class="mb-1">Foresight<span style="background:linear-gradient(135deg,#60A5FA,#A78BFA);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">Tape</span></h2>
-        <div class="ft-muted ft-small">
-            Next-session probability forecasts — Student-t distribution over volatility-scaled
-            returns{% if catalyst_available %}, with a Claude-researched catalyst overlay{% endif %}.
-        </div>
+      <h1 class="ft-title">Foresight<span>Tape</span></h1>
+      <p class="ft-sub">
+        Next-session probabilities from a volatility model{% if catalyst_available %},
+        tilted by researched catalysts{% endif %}. A well-calibrated board sits near
+        50% — distance from the centre line is the entire claimed edge.
+      </p>
     </div>
-    <div class="d-flex align-items-center gap-2 flex-wrap">
-        {% if catalyst_available %}
-        <div class="form-check form-switch me-2" title="Blend in web-researched catalysts (earnings, Fed, news) via Claude">
-            <input class="form-check-input" type="checkbox" id="catalystToggle" checked>
-            <label class="form-check-label ft-small" for="catalystToggle">Catalyst overlay</label>
-        </div>
-        {% else %}
-        <span class="badge badge-neutral" title="Set ANTHROPIC_API_KEY on the server to enable the Claude catalyst overlay">quant-only mode</span>
-        {% endif %}
-        <button id="scanBtn" class="btn btn-primary btn-sm px-3">
-            <i class="fa-solid fa-satellite-dish me-1"></i> Scan market
-        </button>
+    <div class="ft-actions">
+      {% if catalyst_available %}
+      <label class="ft-switch" title="Blend in researched catalysts (earnings, Fed, news)">
+        <input type="checkbox" id="catalystToggle" checked>
+        <span>Catalysts</span>
+      </label>
+      {% else %}
+      <span class="ft-badge ft-b-doji" title="Set ANTHROPIC_API_KEY on the server to enable">
+        quant-only
+      </span>
+      {% endif %}
+      <button id="scanBtn" class="ft-btn">Scan market</button>
     </div>
-</div>
+  </header>
 
-<div id="tapeWrap" class="ft-tape-wrap d-none"><div id="tape" class="ft-tape"></div></div>
+  <div id="tapeWrap" class="ft-tape" hidden><div id="tape" class="ft-tape-track"></div></div>
+  <div id="statusBar" hidden></div>
 
-<div id="statusBar" class="alert d-none ft-small py-2" role="alert"></div>
+  <div class="ft-tabs" role="tablist">
+    <button class="ft-tab" role="tab" aria-selected="true"  data-view="board">Board</button>
+    <button class="ft-tab" role="tab" aria-selected="false" data-view="grid">Heatmap</button>
+    <button class="ft-tab" role="tab" aria-selected="false" data-view="watch">Watchlist</button>
+    <button class="ft-tab" role="tab" aria-selected="false" data-view="score">Accuracy</button>
+  </div>
 
-<ul class="nav nav-pills mb-3 gap-1" id="ftTabs">
-    <li class="nav-item"><button class="nav-link active btn-sm" data-view="heatmap">Heatmap</button></li>
-    <li class="nav-item"><button class="nav-link btn-sm" data-view="screener">Screener</button></li>
-    <li class="nav-item"><button class="nav-link btn-sm" data-view="watch">Watchlist</button></li>
-    <li class="nav-item"><button class="nav-link btn-sm" data-view="score">Accuracy</button></li>
-</ul>
-
-<!-- HEATMAP -->
-<div id="view-heatmap" class="ft-view">
-    <div id="heatmapEmpty" class="card"><div class="card-body text-center ft-muted py-5">
-        No forecast yet. <b>Scan market</b> builds a probability board for every tracked ticker —
-        the tape, heatmap and screener all fill from one scan.
-    </div></div>
-    <div id="heatmapGrid" class="row g-2 d-none"></div>
-    <div class="ft-small ft-muted mt-3 d-none" id="heatmapLegend">
-        Tile shade = conviction &middot; green/red = predicted direction &middot; grey doji = no edge
-        &middot; P(up) is the modelled probability the next session closes higher.
+  <!-- BOARD -->
+  <section id="view-board" role="tabpanel">
+    <div id="boardEmpty" class="ft-empty">
+      Nothing scanned yet. <b>Scan market</b> builds a probability board for every
+      tracked ticker — the tape, board and heatmap all fill from one scan.
     </div>
-</div>
-
-<!-- SCREENER -->
-<div id="view-screener" class="ft-view d-none">
-    <div class="card"><div class="table-responsive">
-        <table class="table table-dark table-hover ft-table mb-0">
-            <thead><tr id="screenerHead"></tr></thead>
-            <tbody id="screenerBody"></tbody>
-        </table>
-    </div></div>
-</div>
-
-<!-- WATCHLIST -->
-<div id="view-watch" class="ft-view d-none">
-    <div class="d-flex gap-2 mb-3 flex-wrap">
-        <input id="wlInput" class="form-control ft-mono" style="max-width:480px"
-               placeholder="LMT, XOM, CRWD, BRK-B, ^VIX …" autocomplete="off">
-        <button id="wlBtn" class="btn btn-primary btn-sm px-3">Forecast</button>
+    <div id="boardSort" class="ft-actions" style="margin-bottom:.75rem" hidden>
+      <span class="ft-sec" style="margin:0">Sort</span>
+      <button class="ft-tab" data-sort="conviction" aria-selected="true">Conviction</button>
+      <button class="ft-tab" data-sort="p_up" aria-selected="false">P(up)</button>
+      <button class="ft-tab" data-sort="expected_move_pct" aria-selected="false">Move</button>
+      <button class="ft-tab" data-sort="ticker" aria-selected="false">Symbol</button>
     </div>
-    <div id="wlEmpty" class="card"><div class="card-body text-center ft-muted py-5">
-        Up to 12 symbols. Each gets the same treatment as the board: a year of history through the
-        volatility engine, then the catalyst overlay if enabled.
-    </div></div>
-    <div class="card d-none" id="wlCard"><div class="table-responsive">
-        <table class="table table-dark table-hover ft-table mb-0">
-            <thead><tr id="wlHead"></tr></thead>
-            <tbody id="wlBody"></tbody>
-        </table>
-    </div></div>
-</div>
+    <div id="boardRows" class="ft-rows"></div>
+  </section>
 
-<!-- ACCURACY -->
-<div id="view-score" class="ft-view d-none">
-    <div class="card mb-3"><div class="card-body">
-        <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
-            <div>
-                <div class="fw-semibold mb-1">Historical backtest</div>
-                <div class="ft-small ft-muted" style="max-width:640px">
-                    Replays the quant engine forward through history — each session
-                    forecast using only the bars available at the time — so you get a
-                    real skill estimate now instead of waiting weeks for the live
-                    ledger to fill. The catalyst overlay is excluded: past web
-                    research can't be reconstructed without leaking the outcome.
-                </div>
-            </div>
-            <button id="btBtn" class="btn btn-outline-secondary btn-sm px-3">
-                <i class="fa-solid fa-clock-rotate-left me-1"></i> Run backtest
-            </button>
-        </div>
-        <div id="btStatus" class="ft-small mt-3 d-none"></div>
-        <div id="btResults" class="d-none mt-3"></div>
-    </div></div>
+  <!-- HEATMAP -->
+  <section id="view-grid" role="tabpanel" hidden>
+    <div id="gridEmpty" class="ft-empty">Run a scan to see the heatmap.</div>
+    <div id="grid" class="ft-grid"></div>
+    <p id="gridLegend" class="ft-foot" hidden>
+      Tint depth = conviction. Direction is shown by the arrow and label as well as
+      colour, so the board stays readable without colour vision.
+    </p>
+  </section>
 
-    <div class="ft-small ft-muted mb-2 text-uppercase" style="letter-spacing:1px">Live forecast ledger</div>
-    <div class="row g-3 mb-3" id="scoreCards"></div>
-    <div class="row g-3">
-        <div class="col-lg-5">
-            <div class="card h-100"><div class="card-header">Calibration (90d)</div>
-                <div class="table-responsive"><table class="table table-dark ft-table mb-0">
-                    <thead><tr><th>Forecast P(up)</th><th class="text-end">N</th>
-                        <th class="text-end">Realized up-rate</th></tr></thead>
-                    <tbody id="calibBody"></tbody>
-                </table></div>
-            </div>
-        </div>
-        <div class="col-lg-7">
-            <div class="card h-100"><div class="card-header">Recently graded forecasts</div>
-                <div class="table-responsive"><table class="table table-dark ft-table mb-0">
-                    <thead><tr><th>Ticker</th><th>Session</th><th>Call</th>
-                        <th class="text-end">P(up)</th><th class="text-end">Realized</th>
-                        <th class="text-end">Brier</th></tr></thead>
-                    <tbody id="recentBody"></tbody>
-                </table></div>
-            </div>
-        </div>
+  <!-- WATCHLIST -->
+  <section id="view-watch" role="tabpanel" hidden>
+    <label class="ft-sr" for="wlInput">Ticker symbols</label>
+    <div style="display:flex; gap:.6rem; flex-wrap:wrap; margin-bottom:1rem">
+      <input id="wlInput" class="ft-input" style="flex:1 1 16rem"
+             placeholder="LMT, XOM, CRWD, BRK-B…" autocomplete="off"
+             autocapitalize="characters" spellcheck="false">
+      <button id="wlBtn" class="ft-btn">Forecast</button>
     </div>
-</div>
+    <div id="wlEmpty" class="ft-empty">
+      Up to 12 symbols, same treatment as the board: a year of history through the
+      volatility engine.
+    </div>
+    <div id="wlRows" class="ft-rows"></div>
+  </section>
 
-<div class="ft-small ft-muted mt-4 pt-3 border-top" style="border-color:var(--border-color)!important">
-    Forecasts, not advice. Every number is a modelled probability distribution over the next
-    session, scored after the fact on the Accuracy tab — a next-session candle is the noisiest
-    object in markets, and a well-calibrated board hugs 50%. Doji means the honest answer is
-    "no edge."
+  <!-- ACCURACY -->
+  <section id="view-score" role="tabpanel" hidden>
+    <div class="ft-card">
+      <div style="display:flex; gap:1rem; align-items:flex-start; justify-content:space-between; flex-wrap:wrap">
+        <div style="flex:1 1 22rem">
+          <b>Historical backtest</b>
+          <p class="ft-sub" style="margin-top:.35rem">
+            Replays the engine through history — each session forecast using only the
+            bars that existed then — so you get a real skill estimate now instead of
+            waiting weeks. Catalysts are excluded: past research can't be
+            reconstructed without leaking the answer.
+          </p>
+        </div>
+        <button id="btBtn" class="ft-btn ft-btn-ghost">Run backtest</button>
+      </div>
+      <div id="btStatus" style="margin-top:.9rem" hidden></div>
+      <div id="btResults" style="margin-top:.9rem" hidden></div>
+    </div>
+
+    <div class="ft-sec">Live forecast ledger</div>
+    <div id="scoreCards" class="ft-stats"></div>
+    <div id="scoreDetail"></div>
+  </section>
+
+  <p class="ft-foot">
+    Forecasts, not advice. Every figure is a modelled probability for the next
+    session, graded after the fact on the Accuracy tab. A next-session candle is
+    the noisiest object in markets — <b>doji means the honest answer is “no edge”</b>,
+    and most days most tickers should say exactly that.
+  </p>
 </div>
 {% endblock %}
 
@@ -179,411 +334,329 @@ th.sortable:hover { color: #F8FAFC; }
 "use strict";
 
 const $ = (id) => document.getElementById(id);
-const state = { market: null, watch: null, sortKey: "conviction", sortDir: -1,
-                wlSortKey: "conviction", wlSortDir: -1, loading: false };
-
-// ---------- helpers ----------
-const fmtPct = (v, signed = true) =>
-    v == null ? "—" : `${signed && v > 0 ? "+" : ""}${v.toFixed(2)}%`;
-const dirWord = (d) => d === "bull" ? "Bullish" : d === "bear" ? "Bearish" : "Doji";
-const dirClass = (d) => d === "bull" ? "text-success" : d === "bear" ? "text-danger" : "ft-muted";
-const dirArrow = (d) => d === "bull" ? "▲" : d === "bear" ? "▼" : "—";
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g,
-    (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-function status(msg, kind = "info") {
-    const el = $("statusBar");
-    if (!msg) { el.classList.add("d-none"); return; }
-    el.className = `alert alert-${kind} ft-small py-2`;
-    el.innerHTML = msg;
+const state = { market: null, watch: null, sort: "conviction", loading: false };
+
+// Direction is encoded three ways — glyph, word, colour — so it never depends
+// on colour vision alone.
+const DIR = {
+  bull: { word: "Bullish", glyph: "▲", cls: "ft-b-bull", css: "var(--ft-bull)" },
+  bear: { word: "Bearish", glyph: "▼", cls: "ft-b-bear", css: "var(--ft-bear)" },
+  doji: { word: "No edge", glyph: "—", cls: "ft-b-doji", css: "var(--ft-doji)" },
+};
+const dir = (d) => DIR[d] || DIR.doji;
+const pct = (v, signed = true) =>
+  v == null ? "—" : `${signed && v > 0 ? "+" : ""}${Number(v).toFixed(2)}%`;
+
+function status(html, kind = "info") {
+  const el = $("statusBar");
+  if (!html) { el.hidden = true; return; }
+  el.className = `ft-status ft-status-${kind}`;
+  el.innerHTML = html;
+  el.hidden = false;
 }
 
-function useCatalyst() {
-    const t = $("catalystToggle");
-    return t ? t.checked : false;
-}
+const useCatalyst = () => ($("catalystToggle") ? $("catalystToggle").checked : false);
 
 async function getJSON(url) {
-    const res = await fetch(url);
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-    return data;
+  const res = await fetch(url);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  return data;
 }
 
 // ---------- tape ----------
 function renderTape() {
-    const rows = [ ...(state.market?.rows || []), ...(state.watch?.rows || []) ];
-    const seen = new Set(), unique = [];
-    for (const r of rows) if (!seen.has(r.ticker)) { seen.add(r.ticker); unique.push(r); }
-    if (!unique.length) { $("tapeWrap").classList.add("d-none"); return; }
+  const all = [...(state.market?.rows || []), ...(state.watch?.rows || [])];
+  const seen = new Set(), rows = [];
+  for (const r of all) if (!seen.has(r.ticker)) { seen.add(r.ticker); rows.push(r); }
+  if (!rows.length) { $("tapeWrap").hidden = true; return; }
 
-    const chip = (r) => `<span class="chip">
-        <b>${esc(r.ticker)}</b>
-        <span class="${dirClass(r.direction)}">${dirArrow(r.direction)}</span>
-        <span class="${dirClass(r.direction)}">${(r.p_up * 100).toFixed(0)}%↑</span>
-        <span class="ft-muted">±${r.band_68_pct.toFixed(1)}%</span>
-    </span>`;
-    const strip = unique.map(chip).join("");
-    $("tape").innerHTML = strip + strip;   // doubled for the seamless loop
-    $("tapeWrap").classList.remove("d-none");
+  const chip = (r) => {
+    const d = dir(r.direction);
+    return `<span class="ft-chip ft-num"><b>${esc(r.ticker)}</b>` +
+      `<span style="color:${d.css}">${d.glyph} ${(r.p_up * 100).toFixed(0)}%</span>` +
+      `<span style="color:var(--ft-ink-3)">±${Number(r.band_68_pct).toFixed(1)}%</span></span>`;
+  };
+  const strip = rows.map(chip).join("");
+  $("tape").innerHTML = strip + strip;   // doubled for the seamless loop
+  $("tapeWrap").hidden = false;
 }
 
-// ---------- heatmap ----------
-function tileClass(r) {
-    if (r.direction === "doji") return "ft-doji";
-    const base = r.direction === "bull" ? "ft-bull" : "ft-bear";
-    return `${base}-${r.conviction >= 65 ? "hi" : r.conviction >= 45 ? "md" : "lo"}`;
-}
-
-function renderHeatmap() {
-    const rows = state.market?.rows || [];
-    $("heatmapEmpty").classList.toggle("d-none", !!rows.length);
-    $("heatmapGrid").classList.toggle("d-none", !rows.length);
-    $("heatmapLegend").classList.toggle("d-none", !rows.length);
-    if (!rows.length) return;
-
-    $("heatmapGrid").innerHTML = rows.map((r) => `
-        <div class="col-6 col-md-4 col-xl-3">
-            <div class="ft-tile ${tileClass(r)}" title="${esc(r.rationale)}">
-                <div class="d-flex justify-content-between align-items-baseline">
-                    <span class="ft-mono fw-bold">${esc(r.ticker)}</span>
-                    <span class="ft-mono ft-small ${dirClass(r.direction)}">${(r.p_up * 100).toFixed(0)}%↑</span>
-                </div>
-                <div class="ft-small ft-muted text-truncate">${esc(r.name || "")}</div>
-                <div class="ft-small ft-mono mt-1">
-                    <span class="${dirClass(r.direction)}">${fmtPct(r.expected_move_pct)}</span>
-                    <span class="ft-muted"> · ±${r.band_68_pct.toFixed(1)}%</span>
-                </div>
-                ${r.catalyst ? `<div class="ft-small mt-1 text-warning-emphasis text-truncate"
-                    title="${esc(r.catalyst)}">⚡ ${esc(r.catalyst)}</div>` : ""}
-            </div>
-        </div>`).join("");
-}
-
-// ---------- screener tables ----------
-const COLUMNS = [
-    { key: "ticker",            label: "Symbol",     num: false },
-    { key: "direction",         label: "Signal",     num: false },
-    { key: "p_up",              label: "P(up)",      num: true  },
-    { key: "expected_move_pct", label: "Exp. move",  num: true  },
-    { key: "band_68_pct",       label: "±1σ",        num: true  },
-    { key: "conviction",        label: "Conviction", num: true  },
-    { key: "vol_regime",        label: "Vol",        num: false },
-    { key: "rationale",         label: "Why",        num: false, sortable: false },
-];
-
-function sortRows(rows, key, dir) {
-    const order = { bull: 2, doji: 1, bear: 0 };
-    return [...rows].sort((a, b) => {
-        let av = a[key], bv = b[key];
-        if (key === "direction") { av = order[av] ?? 0; bv = order[bv] ?? 0; }
-        if (typeof av === "string") return dir * av.localeCompare(bv);
-        return dir * ((av ?? 0) - (bv ?? 0));
-    });
-}
-
-function pbar(r) {
-    const p = r.p_up, up = p >= 0.5;
-    const width = Math.abs(p - 0.5) * 200;   // as % of half the bar
-    const color = r.direction === "doji" ? "#94A3B8" : up ? "#10B981" : "#F43F5E";
-    const side = up ? "margin-left:50%" : `margin-left:${50 - width / 2}%`;
-    return `<div class="ft-pbar" title="P(up) ${(p * 100).toFixed(1)}%">
-        <div style="width:${(width / 2).toFixed(1)}%;${side};background:${color}"></div>
-        <span class="mid"></span></div>`;
+// ---------- forecast rows ----------
+function sortRows(rows) {
+  const key = state.sort;
+  const order = { bull: 2, doji: 1, bear: 0 };
+  return [...rows].sort((a, b) => {
+    if (key === "ticker") return String(a.ticker).localeCompare(String(b.ticker));
+    if (key === "expected_move_pct") return Math.abs(b[key] ?? 0) - Math.abs(a[key] ?? 0);
+    if (key === "p_up") return Math.abs((b.p_up ?? .5) - .5) - Math.abs((a.p_up ?? .5) - .5);
+    return (b[key] ?? 0) - (a[key] ?? 0) || (order[b.direction] - order[a.direction]);
+  });
 }
 
 function rowHTML(r) {
-    const src = r.source === "blended"
-        ? `<span class="badge badge-neutral ft-badge-src ms-1" title="Catalyst overlay applied (shift ${r.catalyst_shift >= 0 ? "+" : ""}${r.catalyst_shift}, vol ×${r.vol_multiplier})">AI</span>`
-        : "";
-    return `<tr>
-        <td class="ft-mono fw-bold">${esc(r.ticker)}${src}
-            <div class="ft-small ft-muted fw-normal text-truncate" style="max-width:140px">${esc(r.name || "")}</div></td>
-        <td class="${dirClass(r.direction)}">${dirArrow(r.direction)} ${dirWord(r.direction)}</td>
-        <td class="text-end" style="min-width:110px">
-            <span class="ft-mono">${(r.p_up * 100).toFixed(1)}%</span>${pbar(r)}</td>
-        <td class="text-end ft-mono ${dirClass(r.direction)}">${fmtPct(r.expected_move_pct)}</td>
-        <td class="text-end ft-mono ft-muted">±${r.band_68_pct.toFixed(2)}%</td>
-        <td class="text-end ft-mono">${r.conviction}</td>
-        <td><span class="badge ${r.vol_regime === "stressed" ? "badge-bearish" : r.vol_regime === "calm" ? "badge-bullish" : "badge-neutral"}">${esc(r.vol_regime)}</span></td>
-        <td class="ft-small ft-muted" style="max-width:340px">${esc(r.rationale)}</td>
-    </tr>`;
+  const d = dir(r.direction);
+  const p = Number(r.p_up);
+  // Half-width from the 50% midpoint: the visual length *is* the edge.
+  const w = Math.min(Math.abs(p - 0.5) * 100, 50);
+  const bar = p >= 0.5
+    ? `<i style="left:50%;width:${w}%;background:${d.css}"></i>`
+    : `<i style="right:50%;width:${w}%;background:${d.css}"></i>`;
+  const cat = r.catalyst
+    ? ` <span class="ft-badge ft-b-doji" title="${esc(r.catalyst)}">⚡ ${esc(r.catalyst)}</span>` : "";
+
+  return `<article class="ft-row" data-dir="${esc(r.direction)}">
+    <div class="ft-id">
+      <div class="ft-tick">${esc(r.ticker)}
+        <span class="ft-badge ${d.cls}">${d.glyph} ${d.word}</span></div>
+      <div class="ft-name">${esc(r.name || "")}</div>
+    </div>
+    <div class="ft-bar" role="img"
+         aria-label="Probability of an up session ${(p * 100).toFixed(1)} percent">${bar}</div>
+    <div class="ft-move">
+      <div class="ft-move-v ft-num" style="color:${d.css}">${pct(r.expected_move_pct)}</div>
+      <div class="ft-move-s ft-num">${(p * 100).toFixed(0)}% up · ±${Number(r.band_68_pct).toFixed(1)}%</div>
+    </div>
+    <div class="ft-why">${esc(r.rationale || "")}${cat}</div>
+  </article>`;
 }
 
-function renderTable(headId, bodyId, rows, keyName, dirName) {
-    const head = COLUMNS.map((c) => {
-        const active = state[keyName] === c.key;
-        const arrow = active ? (state[dirName] === -1 ? " ↓" : " ↑") : "";
-        const cls = c.sortable === false ? "" : "sortable";
-        return `<th class="${cls} ${c.num ? "text-end" : ""}" data-key="${c.key}">${c.label}${arrow}</th>`;
-    }).join("");
-    $(headId).innerHTML = head;
-    $(headId).querySelectorAll("th.sortable").forEach((th) => th.onclick = () => {
-        const k = th.dataset.key;
-        if (state[keyName] === k) state[dirName] *= -1;
-        else { state[keyName] = k; state[dirName] = -1; }
-        renderAll();
-    });
-    $(bodyId).innerHTML = sortRows(rows, state[keyName], state[dirName]).map(rowHTML).join("")
-        || `<tr><td colspan="8" class="text-center ft-muted py-4">No rows.</td></tr>`;
-}
+function renderBoard() {
+  const rows = state.market?.rows || [];
+  $("boardEmpty").hidden = rows.length > 0;
+  $("boardSort").hidden = rows.length === 0;
+  $("boardRows").innerHTML = sortRows(rows).map(rowHTML).join("");
 
-// ---------- accuracy ----------
-function scoreCard(label, value, hint) {
-    return `<div class="col-6 col-lg-3"><div class="card stat-card h-100" title="${esc(hint)}">
-        <div class="value">${value}</div><div class="label">${label}</div></div></div>`;
-}
+  $("gridEmpty").hidden = rows.length > 0;
+  $("gridLegend").hidden = rows.length === 0;
+  $("grid").innerHTML = sortRows(rows).map((r) => {
+    const d = dir(r.direction);
+    // Conviction drives tint depth; direction still carries a glyph and label.
+    const a = (0.07 + (Math.min(r.conviction, 100) / 100) * 0.20).toFixed(3);
+    const tint = r.direction === "bull" ? `rgba(25,158,112,${a})`
+               : r.direction === "bear" ? `rgba(217,89,38,${a})`
+               : `rgba(154,154,148,${a})`;
+    return `<div class="ft-tile" style="background:${tint}" title="${esc(r.rationale || "")}">
+      <div class="ft-tile-top">
+        <span class="ft-tick">${esc(r.ticker)}</span>
+        <span class="ft-num" style="color:${d.css};font-weight:650">${d.glyph} ${(r.p_up * 100).toFixed(0)}%</span>
+      </div>
+      <div>
+        <div class="ft-name">${esc(r.name || "")}</div>
+        <div class="ft-num" style="font-size:.8rem;color:${d.css}">${pct(r.expected_move_pct)}
+          <span style="color:var(--ft-ink-3)">±${Number(r.band_68_pct).toFixed(1)}%</span></div>
+      </div>
+    </div>`;
+  }).join("");
 
-async function loadScorecard() {
-    try {
-        const data = await getJSON("/foresight/api/scorecard");
-        const s = data.scorecard || {};
-        if (!s.resolved) {
-            $("scoreCards").innerHTML = `<div class="col-12"><div class="card"><div
-                class="card-body ft-muted">${esc(s.message || "No resolved forecasts yet.")}</div></div></div>`;
-            $("calibBody").innerHTML = $("recentBody").innerHTML = "";
-            return;
-        }
-        const skill = s.brier_skill_score;
-        $("scoreCards").innerHTML =
-            scoreCard("Resolved forecasts", s.resolved, `Trailing ${s.window_days} days`) +
-            scoreCard("Brier score", s.brier.toFixed(3), "Mean squared probability error — lower is better; 0.25 = coin flip") +
-            scoreCard("Skill vs coin flip", `<span class="${skill > 0 ? "text-success" : "text-danger"}">${(skill * 100).toFixed(1)}%</span>`,
-                "Positive = the engine beats always saying 50/50") +
-            scoreCard("Directional hit rate", s.hit_rate == null ? "—" : (s.hit_rate * 100).toFixed(1) + "%",
-                `${s.directional_calls} bull/bear calls; dojis (${s.doji_calls}) excluded`);
-        $("calibBody").innerHTML = (s.calibration || []).map((b) => `<tr>
-            <td class="ft-mono">${b.range}</td><td class="text-end">${b.count}</td>
-            <td class="text-end ft-mono">${(b.realized_up_rate * 100).toFixed(0)}%</td></tr>`).join("")
-            || `<tr><td colspan="3" class="ft-muted text-center py-3">Not enough data yet.</td></tr>`;
-        $("recentBody").innerHTML = (data.recent || []).map((r) => `<tr>
-            <td class="ft-mono fw-bold">${esc(r.ticker)}</td>
-            <td class="ft-small ft-muted">${esc(r.target_date || "")}</td>
-            <td class="${dirClass(r.direction)}">${dirWord(r.direction)}</td>
-            <td class="text-end ft-mono">${(r.p_up * 100).toFixed(0)}%</td>
-            <td class="text-end ft-mono ${r.realized_return_pct >= 0 ? "text-success" : "text-danger"}">${fmtPct(r.realized_return_pct)}</td>
-            <td class="text-end ft-mono">${r.brier.toFixed(3)}</td></tr>`).join("")
-            || `<tr><td colspan="6" class="ft-muted text-center py-3">Nothing graded yet.</td></tr>`;
-    } catch (e) {
-        $("scoreCards").innerHTML = `<div class="col-12"><div class="alert alert-danger ft-small">${esc(e.message)}</div></div>`;
-    }
+  const wl = state.watch?.rows || [];
+  $("wlEmpty").hidden = wl.length > 0;
+  $("wlRows").innerHTML = sortRows(wl).map(rowHTML).join("");
+  renderTape();
 }
 
 // ---------- diagnostics ----------
 async function runDiagnostics() {
-    const out = $("diagOut");
-    if (!out) return;
-    out.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>Probing DNS, Yahoo over HTTPS, and yfinance…`;
-    try {
-        const d = await getJSON("/foresight/api/diagnostics");
-        const v = d.verdict || {};
-        const p = d.probes || {};
-        const https = p.https_direct || {};
-        const yfin = p.yfinance || {};
-        out.innerHTML = `
-          <div class="card"><div class="card-body">
-            <div class="fw-semibold mb-1">${esc(v.summary || "")}</div>
-            <div class="ft-small ft-muted mb-2">Cause: <code>${esc(v.cause || "unknown")}</code></div>
-            <div class="ft-small mb-3"><b>What to do:</b> ${esc(v.action || "")}</div>
-            <table class="table table-dark ft-table mb-2"><tbody>
-              <tr><td>Yahoo over HTTPS</td><td class="text-end ft-mono">${
-                  https.ok ? "OK " + (https.status_code ?? "") : "FAILED " + esc(https.status_code ?? https.error ?? "")}</td></tr>
-              <tr><td>yfinance download()</td><td class="text-end ft-mono">${
-                  (yfin.download || {}).ok ? "OK (" + yfin.download.rows + " rows)" : "no data"}</td></tr>
-              <tr><td>yfinance Ticker.history()</td><td class="text-end ft-mono">${
-                  (yfin.ticker_history || {}).ok ? "OK (" + yfin.ticker_history.rows + " rows)" : "no data"}</td></tr>
-              <tr><td>Engine parser</td><td class="text-end ft-mono">${
-                  (p.engine_fetch || {}).ok ? "OK (" + p.engine_fetch.bars + " bars)" : "no bars"}</td></tr>
-              <tr><td class="ft-muted">yfinance version</td><td class="text-end ft-mono ft-muted">${esc((d.versions || {}).yfinance || "?")}</td></tr>
-            </tbody></table>
-            <details><summary class="ft-small ft-muted">Raw probe output</summary>
-              <pre class="ft-small mt-2 mb-0" style="white-space:pre-wrap;max-height:320px;overflow:auto">${esc(JSON.stringify(d, null, 2))}</pre>
-            </details>
-          </div></div>`;
-    } catch (e) {
-        out.innerHTML = `<span class="text-danger ft-small">Diagnostics failed: ${esc(e.message)}</span>`;
+  const out = $("diagOut");
+  if (!out) return;
+  out.innerHTML = "Probing DNS, Yahoo, the fallback source, and the parser…";
+  try {
+    const d = await getJSON("/foresight/api/diagnostics");
+    const v = d.verdict || {}, p = d.probes || {};
+    const row = (k, ok, extra) =>
+      `<tr><td>${esc(k)}</td><td class="ft-num" style="text-align:right;color:${
+        ok ? "var(--ft-bull)" : "var(--ft-bear)"}">${ok ? "OK" : "failed"} ${esc(extra || "")}</td></tr>`;
+    out.innerHTML = `<div class="ft-card" style="margin-top:.75rem">
+      <b>${esc(v.summary || "")}</b>
+      <div class="ft-sub" style="margin:.4rem 0 .75rem"><b>Fix:</b> ${esc(v.action || "")}</div>
+      <table class="ft-mini"><tbody>
+        ${row("Yahoo over HTTPS", (p.https_direct || {}).ok, (p.https_direct || {}).status_code)}
+        ${row("Stooq fallback", (p.stooq_fallback || {}).ok, ((p.stooq_fallback || {}).bars || 0) + " bars")}
+        ${row("Engine parser", (p.engine_fetch || {}).ok, ((p.engine_fetch || {}).bars || 0) + " bars")}
+      </tbody></table>
+      <details style="margin-top:.6rem"><summary class="ft-sub">Raw output</summary>
+        <pre class="ft-num" style="white-space:pre-wrap;max-height:280px;overflow:auto;font-size:.72rem">${esc(JSON.stringify(d, null, 2))}</pre>
+      </details></div>`;
+  } catch (e) {
+    out.innerHTML = `<span style="color:var(--ft-bear)">Diagnostics failed: ${esc(e.message)}</span>`;
+  }
+}
+
+// ---------- scans ----------
+function setLoading(on) {
+  state.loading = on;
+  $("scanBtn").disabled = on;
+  $("wlBtn").disabled = on;
+}
+
+async function scanMarket() {
+  if (state.loading) return;
+  const cat = useCatalyst();
+  setLoading(true);
+  status(cat ? "Running the volatility engine, then researching catalysts — up to a minute…"
+             : "Running the volatility engine across the board…", "info");
+  try {
+    state.market = await getJSON(`/foresight/api/market?catalyst=${cat ? 1 : 0}`);
+    sessionStorage.setItem("ft-market", JSON.stringify(state.market));
+    const m = state.market;
+    if (m.error) {
+      status(`<b>No data came back.</b><div style="margin:.4rem 0 .7rem">${esc(m.error)}</div>
+        <button id="diagBtn" class="ft-btn ft-btn-ghost">Diagnose connection</button>
+        <div id="diagOut"></div>`, "err");
+      const b = $("diagBtn"); if (b) b.onclick = runDiagnostics;
+    } else {
+      const bits = [`${m.rows.length} tickers`];
+      if (m.catalyst_applied) bits.push("catalysts applied");
+      (m.fetch_reasons || []).forEach((r) => bits.push(r));
+      status(bits.join(" · "), "ok");
+      setTimeout(() => { if (!state.loading) status(null); }, 7000);
     }
+  } catch (e) { status(`Scan failed: ${esc(e.message)}`, "err"); }
+  setLoading(false);
+  renderBoard();
+}
+
+async function scanWatchlist() {
+  if (state.loading) return;
+  const raw = $("wlInput").value.trim();
+  if (!raw) return;
+  setLoading(true);
+  status("Forecasting watchlist…", "info");
+  try {
+    state.watch = await getJSON(
+      `/foresight/api/watchlist?tickers=${encodeURIComponent(raw)}&catalyst=${useCatalyst() ? 1 : 0}`);
+    sessionStorage.setItem("ft-watch", JSON.stringify(state.watch));
+    sessionStorage.setItem("ft-watch-input", raw);
+    status(state.watch.error ? esc(state.watch.error) : null,
+           state.watch.error ? "err" : "ok");
+  } catch (e) { status(`Watchlist failed: ${esc(e.message)}`, "err"); }
+  setLoading(false);
+  renderBoard();
+}
+
+// ---------- accuracy ----------
+const statTile = (label, value, hint) =>
+  `<div class="ft-stat" title="${esc(hint || "")}">
+     <div class="ft-stat-v ft-num">${value}</div><div class="ft-stat-l">${esc(label)}</div></div>`;
+
+async function loadScorecard() {
+  try {
+    const d = await getJSON("/foresight/api/scorecard");
+    const s = d.scorecard || {};
+    if (!s.resolved) {
+      $("scoreCards").innerHTML = "";
+      $("scoreDetail").innerHTML =
+        `<div class="ft-empty">${esc(s.message || "No resolved forecasts yet.")}</div>`;
+      return;
+    }
+    const skill = s.brier_skill_score;
+    $("scoreCards").innerHTML =
+      statTile("Resolved", s.resolved, `Trailing ${s.window_days} days`) +
+      statTile("Brier", s.brier.toFixed(3), "Mean squared probability error — 0.25 is a coin flip") +
+      statTile("Skill", `<span style="color:${skill > 0 ? "var(--ft-bull)" : "var(--ft-bear)"}">${(skill * 100).toFixed(1)}%</span>`,
+               "Improvement over always predicting 50/50") +
+      statTile("Hit rate", s.hit_rate == null ? "—" : (s.hit_rate * 100).toFixed(0) + "%",
+               `${s.directional_calls} directional calls; ${s.doji_calls} dojis excluded`);
+
+    $("scoreDetail").innerHTML = `
+      <div class="ft-sec">Calibration — claimed vs. realised</div>
+      <div class="ft-card ft-scroll"><table class="ft-mini">
+        <thead><tr><th>Forecast</th><th style="text-align:right">N</th>
+          <th style="text-align:right">Realised up</th></tr></thead>
+        <tbody>${(s.calibration || []).map((b) => `<tr>
+          <td class="ft-num">${esc(b.range)}</td>
+          <td class="ft-num" style="text-align:right">${b.count}</td>
+          <td class="ft-num" style="text-align:right">${(b.realized_up_rate * 100).toFixed(0)}%</td>
+        </tr>`).join("") || `<tr><td colspan="3">Not enough data yet.</td></tr>`}</tbody>
+      </table></div>
+      <div class="ft-sec">Recently graded</div>
+      <div class="ft-rows">${(d.recent || []).slice(0, 25).map((r) => {
+        const dd = dir(r.direction);
+        return `<div class="ft-row" data-dir="${esc(r.direction)}"
+                     style="grid-template-areas:'id move';grid-template-columns:1fr auto">
+          <div class="ft-id"><div class="ft-tick">${esc(r.ticker)}
+            <span class="ft-badge ${dd.cls}">${dd.glyph} ${dd.word}</span></div>
+            <div class="ft-name">${esc(r.target_date || "")} · claimed ${(r.p_up * 100).toFixed(0)}%</div></div>
+          <div class="ft-move"><div class="ft-move-v ft-num" style="color:${
+            r.realized_return_pct >= 0 ? "var(--ft-bull)" : "var(--ft-bear)"}">${pct(r.realized_return_pct)}</div>
+            <div class="ft-move-s ft-num">Brier ${r.brier.toFixed(3)}</div></div>
+        </div>`;
+      }).join("") || `<div class="ft-empty">Nothing graded yet.</div>`}</div>`;
+  } catch (e) {
+    $("scoreDetail").innerHTML = `<div class="ft-status ft-status-err">${esc(e.message)}</div>`;
+  }
 }
 
 // ---------- backtest ----------
 function verdict(s) {
-    const b = s.baselines || {};
-    const skill = s.brier_skill_score;
-    if (!b.beats_coin_flip)
-        return { cls: "danger", text: "No measurable edge — the engine did not beat a coin flip over this sample." };
-    if (!b.beats_always_up)
-        return { cls: "warning", text: "Beats a coin flip but not a naive always-up caller, which equity drift alone rewards. Treat the directional calls as weak." };
-    if (skill < 0.01)
-        return { cls: "warning", text: "Positive but very small edge — consistent with a next-session forecast being mostly noise." };
-    return { cls: "success", text: "Beats both a coin flip and a naive always-up caller over this sample." };
-}
-
-function renderBacktest(s) {
-    if (!s.predictions) {
-        $("btResults").innerHTML = `<div class="ft-muted ft-small">${esc(s.message || "No predictions produced.")}</div>`;
-        $("btResults").classList.remove("d-none");
-        return;
-    }
-    const v = verdict(s);
-    const b = s.baselines || {};
-    const card = (label, value, hint) => `<div class="col-6 col-lg-3">
-        <div class="card stat-card h-100" title="${esc(hint)}">
-            <div class="value" style="font-size:1.6rem">${value}</div>
-            <div class="label">${label}</div></div></div>`;
-
-    $("btResults").innerHTML = `
-      <div class="alert alert-${v.cls} ft-small py-2">${esc(v.text)}</div>
-      <div class="row g-2 mb-3">
-        ${card("Predictions", s.predictions.toLocaleString(),
-               `${s.tickers_tested} tickers, ${s.date_range.start} → ${s.date_range.end}`)}
-        ${card("Brier score", s.brier.toFixed(4), "Lower is better; 0.25 = coin flip")}
-        ${card("Skill vs coin flip",
-               `<span class="${s.brier_skill_score > 0 ? "text-success" : "text-danger"}">${(s.brier_skill_score * 100).toFixed(2)}%</span>`,
-               "1 − Brier/0.25. Positive means better than always saying 50/50")}
-        ${card("Hit rate", s.hit_rate == null ? "—" : (s.hit_rate * 100).toFixed(1) + "%",
-               `${s.directional_calls} directional calls; ${s.doji_calls} dojis excluded`)}
-      </div>
-      <div class="row g-3">
-        <div class="col-lg-6"><div class="card h-100">
-          <div class="card-header ft-small">Versus baselines</div>
-          <table class="table table-dark ft-table mb-0"><tbody>
-            <tr><td>Engine Brier</td><td class="text-end ft-mono">${s.brier.toFixed(4)}</td></tr>
-            <tr><td>Coin flip (always 0.50)</td><td class="text-end ft-mono">${b.coin_flip_brier.toFixed(4)}</td></tr>
-            <tr><td>Always up</td><td class="text-end ft-mono">${b.always_up_brier.toFixed(4)}</td></tr>
-            <tr><td class="ft-muted">Sessions that closed up</td><td class="text-end ft-mono ft-muted">${(s.realized_up_rate * 100).toFixed(1)}%</td></tr>
-            <tr><td class="ft-muted">Mean forecast P(up)</td><td class="text-end ft-mono ft-muted">${(s.mean_forecast_p_up * 100).toFixed(1)}%</td></tr>
-          </tbody></table></div></div>
-        <div class="col-lg-6"><div class="card h-100">
-          <div class="card-header ft-small">Calibration — forecast vs. reality</div>
-          <table class="table table-dark ft-table mb-0">
-            <thead><tr><th>Forecast</th><th class="text-end">N</th><th class="text-end">Realized</th></tr></thead>
-            <tbody>${(s.calibration || []).map((c) => `<tr>
-              <td class="ft-mono">${c.range}</td>
-              <td class="text-end">${c.count.toLocaleString()}</td>
-              <td class="text-end ft-mono">${(c.realized_up_rate * 100).toFixed(1)}%</td></tr>`).join("")}
-            </tbody></table></div></div>
-        <div class="col-lg-6"><div class="card h-100">
-          <div class="card-header ft-small">By volatility regime</div>
-          <table class="table table-dark ft-table mb-0">
-            <thead><tr><th>Regime</th><th class="text-end">N</th><th class="text-end">Skill</th></tr></thead>
-            <tbody>${(s.by_regime || []).map((r) => `<tr>
-              <td>${esc(r.regime)}</td><td class="text-end">${r.count.toLocaleString()}</td>
-              <td class="text-end ft-mono ${r.brier_skill_score > 0 ? "text-success" : "text-danger"}">${(r.brier_skill_score * 100).toFixed(2)}%</td></tr>`).join("")}
-            </tbody></table></div></div>
-        <div class="col-lg-6"><div class="card h-100">
-          <div class="card-header ft-small">Best and worst tickers</div>
-          <table class="table table-dark ft-table mb-0">
-            <thead><tr><th>Ticker</th><th class="text-end">N</th><th class="text-end">Skill</th></tr></thead>
-            <tbody>${(s.by_ticker || []).slice(0, 5).concat((s.by_ticker || []).slice(-3))
-              .filter((r, i, a) => a.findIndex((x) => x.ticker === r.ticker) === i)
-              .map((r) => `<tr><td class="ft-mono">${esc(r.ticker)}</td>
-              <td class="text-end">${r.count.toLocaleString()}</td>
-              <td class="text-end ft-mono ${r.brier_skill_score > 0 ? "text-success" : "text-danger"}">${(r.brier_skill_score * 100).toFixed(2)}%</td></tr>`).join("")}
-            </tbody></table></div></div>
-      </div>`;
-    $("btResults").classList.remove("d-none");
+  const b = s.baselines || {};
+  if (!b.beats_coin_flip)
+    return ["err", "No measurable edge — the engine did not beat a coin flip over this sample."];
+  if (!b.beats_always_up)
+    return ["err", "Beats a coin flip but not a naive always-up caller, which equity drift alone rewards. Treat the directional calls as noise."];
+  if (s.brier_skill_score < 0.01)
+    return ["info", "Positive but very small edge — consistent with next-session direction being mostly noise."];
+  return ["ok", "Beats both a coin flip and a naive always-up caller over this sample."];
 }
 
 async function runBacktest() {
-    const btn = $("btBtn");
-    btn.disabled = true;
-    $("btStatus").className = "ft-small mt-3 text-info";
-    $("btStatus").innerHTML =
-        `<span class="spinner-border spinner-border-sm me-2"></span>Replaying history across every tracked ticker — this takes a moment…`;
-    $("btStatus").classList.remove("d-none");
-    try {
-        const data = await getJSON("/foresight/api/backtest");
-        renderBacktest(data);
-        $("btStatus").classList.add("d-none");
-    } catch (e) {
-        $("btStatus").className = "ft-small mt-3 text-danger";
-        $("btStatus").textContent = `Backtest failed: ${e.message}`;
+  $("btBtn").disabled = true;
+  $("btStatus").className = "ft-status ft-status-info";
+  $("btStatus").textContent = "Replaying history across every tracked ticker…";
+  $("btStatus").hidden = false;
+  try {
+    const s = await getJSON("/foresight/api/backtest");
+    if (!s.predictions) {
+      $("btResults").innerHTML = `<div class="ft-empty">${esc(s.message || "No predictions produced.")}</div>`;
+    } else {
+      const [kind, text] = verdict(s), b = s.baselines || {};
+      $("btResults").innerHTML = `
+        <div class="ft-status ft-status-${kind}">${esc(text)}</div>
+        <div class="ft-stats" style="margin-bottom:.9rem">
+          ${statTile("Predictions", s.predictions.toLocaleString(),
+                     `${s.tickers_tested} tickers, ${s.date_range.start} to ${s.date_range.end}`)}
+          ${statTile("Brier", s.brier.toFixed(4), "Lower is better; 0.25 is a coin flip")}
+          ${statTile("Skill", `<span style="color:${s.brier_skill_score > 0 ? "var(--ft-bull)" : "var(--ft-bear)"}">${(s.brier_skill_score * 100).toFixed(2)}%</span>`,
+                     "Versus always predicting 50/50")}
+          ${statTile("Hit rate", s.hit_rate == null ? "—" : (s.hit_rate * 100).toFixed(0) + "%",
+                     `${s.directional_calls} directional calls`)}
+        </div>
+        <div class="ft-card ft-scroll"><table class="ft-mini">
+          <thead><tr><th>Versus baseline</th><th style="text-align:right">Brier</th></tr></thead>
+          <tbody>
+            <tr><td>This engine</td><td class="ft-num" style="text-align:right">${s.brier.toFixed(4)}</td></tr>
+            <tr><td>Coin flip</td><td class="ft-num" style="text-align:right">${b.coin_flip_brier.toFixed(4)}</td></tr>
+            <tr><td>Always up</td><td class="ft-num" style="text-align:right">${b.always_up_brier.toFixed(4)}</td></tr>
+            <tr><td style="color:var(--ft-ink-3)">Sessions that closed up</td>
+                <td class="ft-num" style="text-align:right;color:var(--ft-ink-3)">${(s.realized_up_rate * 100).toFixed(1)}%</td></tr>
+          </tbody></table></div>`;
     }
-    btn.disabled = false;
+    $("btResults").hidden = false;
+    $("btStatus").hidden = true;
+  } catch (e) {
+    $("btStatus").className = "ft-status ft-status-err";
+    $("btStatus").textContent = `Backtest failed: ${e.message}`;
+  }
+  $("btBtn").disabled = false;
 }
 
-// ---------- actions ----------
-function setLoading(on, label) {
-    state.loading = on;
-    $("scanBtn").disabled = on;
-    $("wlBtn").disabled = on;
-    if (on) status(`<span class="spinner-border spinner-border-sm me-2"></span>${label}`, "info");
-}
+// ---------- wiring ----------
+document.querySelectorAll(".ft-tabs .ft-tab").forEach((btn) => btn.onclick = () => {
+  document.querySelectorAll(".ft-tabs .ft-tab").forEach((b) => b.setAttribute("aria-selected", "false"));
+  btn.setAttribute("aria-selected", "true");
+  ["board", "grid", "watch", "score"].forEach((v) => { $(`view-${v}`).hidden = v !== btn.dataset.view; });
+  if (btn.dataset.view === "score") loadScorecard();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+});
 
-async function scanMarket() {
-    if (state.loading) return;
-    const cat = useCatalyst();
-    setLoading(true, cat
-        ? "Running volatility engine, then researching catalysts with Claude — this can take a minute…"
-        : "Running the volatility engine across the board…");
-    try {
-        state.market = await getJSON(`/foresight/api/market?catalyst=${cat ? 1 : 0}`);
-        sessionStorage.setItem("ft-market", JSON.stringify(state.market));
-        const meta = state.market;
-        const note = [];
-        if (meta.rows?.length) note.push(`${meta.rows.length} tickers forecast`);
-        if (meta.catalyst_applied) note.push("catalyst overlay applied");
-        else if (cat && meta.catalyst_available) note.push("catalyst overlay unavailable this run — quant-only");
-        if (meta.skipped?.length) note.push(`${meta.skipped.length} skipped`);
-
-        if (meta.error) {
-            // An empty board is a symptom; show the cause and a way to diagnose it.
-            status(
-                `<div><b>Scan returned no data.</b></div>` +
-                `<div class="mt-1">${esc(meta.error)}</div>` +
-                `<div class="mt-2"><button id="diagBtn" class="btn btn-sm btn-outline-light">` +
-                `Diagnose market-data connection</button></div>` +
-                `<div id="diagOut" class="mt-2"></div>`,
-                "danger");
-            const db = $("diagBtn");
-            if (db) db.onclick = runDiagnostics;
-        } else {
-            status(note.join(" · "), "success");
-            setTimeout(() => { if (!state.loading) status(null); }, 6000);
-        }
-    } catch (e) {
-        status(`Scan failed: ${esc(e.message)}`, "danger");
-    }
-    setLoading(false);
-    renderAll();
-}
-
-async function scanWatchlist() {
-    if (state.loading) return;
-    const raw = $("wlInput").value.trim();
-    if (!raw) return;
-    setLoading(true, "Forecasting watchlist…");
-    try {
-        state.watch = await getJSON(
-            `/foresight/api/watchlist?tickers=${encodeURIComponent(raw)}&catalyst=${useCatalyst() ? 1 : 0}`);
-        sessionStorage.setItem("ft-watch", JSON.stringify(state.watch));
-        sessionStorage.setItem("ft-watch-input", raw);
-        status(state.watch.error ? esc(state.watch.error) : null,
-               state.watch.error ? "danger" : "info");
-    } catch (e) {
-        status(`Watchlist failed: ${esc(e.message)}`, "danger");
-    }
-    setLoading(false);
-    renderAll();
-}
-
-// ---------- view switching ----------
-function renderAll() {
-    renderTape();
-    renderHeatmap();
-    renderTable("screenerHead", "screenerBody", state.market?.rows || [], "sortKey", "sortDir");
-    const wlRows = state.watch?.rows || [];
-    $("wlEmpty").classList.toggle("d-none", !!wlRows.length);
-    $("wlCard").classList.toggle("d-none", !wlRows.length);
-    if (wlRows.length) renderTable("wlHead", "wlBody", wlRows, "wlSortKey", "wlSortDir");
-}
-
-document.querySelectorAll("#ftTabs .nav-link").forEach((btn) => btn.onclick = () => {
-    document.querySelectorAll("#ftTabs .nav-link").forEach((b) => b.classList.remove("active"));
-    btn.classList.add("active");
-    document.querySelectorAll(".ft-view").forEach((v) => v.classList.add("d-none"));
-    $(`view-${btn.dataset.view}`).classList.remove("d-none");
-    if (btn.dataset.view === "score") loadScorecard();
+document.querySelectorAll("#boardSort .ft-tab").forEach((btn) => btn.onclick = () => {
+  document.querySelectorAll("#boardSort .ft-tab").forEach((b) => b.setAttribute("aria-selected", "false"));
+  btn.setAttribute("aria-selected", "true");
+  state.sort = btn.dataset.sort;
+  renderBoard();
 });
 
 $("scanBtn").onclick = scanMarket;
@@ -591,13 +664,12 @@ $("wlBtn").onclick = scanWatchlist;
 $("btBtn").onclick = runBacktest;
 $("wlInput").addEventListener("keydown", (e) => { if (e.key === "Enter") scanWatchlist(); });
 
-// Restore the last scan within this browser session so tab switches are free.
 try {
-    state.market = JSON.parse(sessionStorage.getItem("ft-market") || "null");
-    state.watch = JSON.parse(sessionStorage.getItem("ft-watch") || "null");
-    $("wlInput").value = sessionStorage.getItem("ft-watch-input") || "";
+  state.market = JSON.parse(sessionStorage.getItem("ft-market") || "null");
+  state.watch = JSON.parse(sessionStorage.getItem("ft-watch") || "null");
+  $("wlInput").value = sessionStorage.getItem("ft-watch-input") || "";
 } catch { /* cold start */ }
-renderAll();
+renderBoard();
 })();
 </script>
 {% endblock %}

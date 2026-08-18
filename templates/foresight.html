@@ -477,9 +477,31 @@ async function runDiagnostics() {
         ${row("Stooq fallback", (p.stooq_fallback || {}).ok, ((p.stooq_fallback || {}).bars || 0) + " bars")}
         ${row("Engine parser", (p.engine_fetch || {}).ok, ((p.engine_fetch || {}).bars || 0) + " bars")}
       </tbody></table>
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.75rem">
+        <button id="diagCopy" class="ft-btn ft-btn-ghost">Copy report</button>
+        <button id="diagRetry" class="ft-btn ft-btn-ghost">Retry scan</button>
+      </div>
       <details style="margin-top:.6rem"><summary class="ft-sub">Raw output</summary>
         <pre class="ft-num" style="white-space:pre-wrap;max-height:280px;overflow:auto;font-size:.72rem">${esc(JSON.stringify(d, null, 2))}</pre>
       </details></div>`;
+    // One tap to grab the whole report — easier than selecting JSON on a phone.
+    const copy = $("diagCopy");
+    if (copy) copy.onclick = async () => {
+      const text = JSON.stringify(d, null, 2);
+      try {
+        await navigator.clipboard.writeText(text);
+        copy.textContent = "Copied ✓";
+      } catch {
+        // Clipboard needs a secure context; fall back to a selectable block.
+        copy.insertAdjacentHTML("afterend",
+          `<textarea class="ft-input" style="height:9rem;padding:.5rem;font-size:.7rem"
+             readonly onclick="this.select()">${esc(text)}</textarea>`);
+        copy.textContent = "Select all and copy";
+      }
+      setTimeout(() => { copy.textContent = "Copy report"; }, 4000);
+    };
+    const retry = $("diagRetry");
+    if (retry) retry.onclick = scanMarket;
   } catch (e) {
     out.innerHTML = `<span style="color:var(--ft-bear)">Diagnostics failed: ${esc(e.message)}</span>`;
   }
@@ -503,10 +525,11 @@ async function scanMarket() {
     sessionStorage.setItem("ft-market", JSON.stringify(state.market));
     const m = state.market;
     if (m.error) {
+      // An empty board is never left as a dead end: run the probes immediately
+      // so the cause is on screen without anyone having to go looking for it.
       status(`<b>No data came back.</b><div style="margin:.4rem 0 .7rem">${esc(m.error)}</div>
-        <button id="diagBtn" class="ft-btn ft-btn-ghost">Diagnose connection</button>
-        <div id="diagOut"></div>`, "err");
-      const b = $("diagBtn"); if (b) b.onclick = runDiagnostics;
+        <div id="diagOut">Checking the data connection…</div>`, "err");
+      runDiagnostics();
     } else {
       const bits = [`${m.rows.length} tickers`];
       if (m.catalyst_applied) bits.push("catalysts applied");

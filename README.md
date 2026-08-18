@@ -44,7 +44,12 @@ track record.
 Endpoints: `/foresight/api/market`, `/foresight/api/watchlist?tickers=…`,
 `/foresight/api/scorecard`, `/foresight/api/backtest`,
 `POST /foresight/api/resolve`.
-Tests: `python -m unittest discover -s tests` (91 tests).
+Tests: `python -m unittest discover -s tests`.
+
+**Board empty?** Run `python diagnose.py` — a standalone report that separates a
+blocked IP, a rate limit, a yfinance/API mismatch and a network problem, and
+captures yfinance's own log (it reports most failures by logging them and
+returning an empty frame, so the app sees "no data" with no exception).
 
 ### ⚠️ Keeping the accuracy history
 

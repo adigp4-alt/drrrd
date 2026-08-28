@@ -90,6 +90,36 @@ class PwaRouteTests(unittest.TestCase):
         self.assertIn("/foresight/api/diagnostics", body)
         self.assertIn("request.method !== \"GET\"", body)
 
+    def test_every_cdn_the_page_loads_is_cached_for_offline(self):
+        """An installed app launched offline must not lose its stylesheets.
+
+        The shared chrome is Bootstrap's, so a CDN the worker doesn't cache
+        renders as an unstyled bullet list under an otherwise fine board. This
+        couples the two files: adding a CDN to the page without adding it to the
+        worker fails here rather than silently regressing offline launch.
+        """
+        import re
+
+        page = self.client.get("/foresight").data.decode()
+        worker = self.client.get("/sw.js").data.decode()
+
+        hosts = {
+            m for m in re.findall(r'https://([^/"\')\s]+)', page)
+            # Same-origin and non-asset links aren't the worker's business.
+            if not m.endswith("github.com")
+        }
+        self.assertTrue(hosts, "expected the page to reference some CDN hosts")
+        for host in sorted(hosts):
+            self.assertIn(host, worker,
+                          f"{host} is loaded by the page but not cached by the "
+                          f"service worker — offline launch would lose it")
+
+    def test_service_worker_only_caches_an_allowlist_cross_origin(self):
+        """Not an open-ended cross-origin cache, which would fill with anything."""
+        worker = self.client.get("/sw.js").data.decode()
+        self.assertIn("ASSET_HOSTS", worker)
+        self.assertIn("ASSET_HOSTS.has(url.hostname)", worker)
+
     def test_apple_touch_icon_and_favicon(self):
         for path in ("/apple-touch-icon.png", "/apple-touch-icon-precomposed.png",
                      "/favicon.ico"):

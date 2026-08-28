@@ -13,12 +13,28 @@
  *   with an `X-From-Cache` header and the page labels it as such rather than
  *   passing yesterday's probabilities off as today's.
  *
+ *   CDN assets (Bootstrap, Font Awesome, Google Fonts) — cache-first. These
+ *   URLs are version-pinned and immutable, so the newest copy is never a
+ *   concern and the network round trip is pure cost. Without this, an installed
+ *   app launched offline renders a fully-styled forecast board under an
+ *   unstyled bullet-list navbar, because the shared chrome is Bootstrap's.
+ *
  * Never cache POSTs, and never cache an error response.
  */
 
 const VERSION = "ft-v1";
 const SHELL_CACHE = `${VERSION}-shell`;
 const DATA_CACHE = `${VERSION}-data`;
+const ASSET_CACHE = `${VERSION}-assets`;
+
+// Only these hosts. An open-ended cross-origin cache would happily fill up with
+// anything the page ever touches.
+const ASSET_HOSTS = new Set([
+  "cdn.jsdelivr.net",
+  "cdnjs.cloudflare.com",
+  "fonts.googleapis.com",
+  "fonts.gstatic.com",
+]);
 
 const SHELL = [
   "/foresight",
@@ -73,12 +89,33 @@ async function networkFirst(request, cacheName, markStale) {
   }
 }
 
+async function cacheFirst(request, cacheName) {
+  const cache = await caches.open(cacheName);
+  const cached = await cache.match(request);
+  if (cached) return cached;
+  const response = await fetch(request);
+  // Cross-origin requests without CORS come back opaque (status 0, body
+  // unreadable). They still render fine as stylesheets and fonts, and caching
+  // them is the entire point here, so accept them alongside genuine 200s.
+  if (response && (response.ok || response.type === "opaque")) {
+    cache.put(request, response.clone());
+  }
+  return response;
+}
+
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   if (request.method !== "GET") return;            // never cache mutations
 
   const url = new URL(request.url);
-  if (url.origin !== self.location.origin) return; // let CDNs handle themselves
+  if (url.origin !== self.location.origin) {
+    // Pinned, immutable CDN assets: serve from cache so an offline launch has
+    // its stylesheets and fonts. Anything else cross-origin is left alone.
+    if (ASSET_HOSTS.has(url.hostname)) {
+      event.respondWith(cacheFirst(request, ASSET_CACHE));
+    }
+    return;
+  }
 
   // Diagnostics must always reflect reality — a cached "healthy" verdict during
   // an outage would be actively misleading.

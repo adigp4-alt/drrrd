@@ -2,7 +2,14 @@
 <html lang="en" data-bs-theme="dark">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#0B0F19">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="format-detection" content="telephone=no">
+    <!-- Install/manifest wiring belongs to the pwa blueprint; pages that want to
+         be installable link it themselves (see foresight.html). -->
     <title>{% block title %}Iran Investment Tracker{% endblock %}</title>
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -23,16 +30,26 @@
             --primary-glow: rgba(59, 130, 246, 0.5);
             --success-color: #10B981;
             --danger-color: #F43F5E;
+            /* Height of the phone tab bar, excluding the safe-area inset. Pages
+               with their own bottom-fixed chrome stack above it by this much. */
+            --ios-tabbar-h: 56px;
         }
         
-        body { 
-            background-color: var(--bg-color); 
-            background-image: 
-                radial-gradient(circle at 15% 50%, rgba(59, 130, 246, 0.08), transparent 25%),
-                radial-gradient(circle at 85% 30%, rgba(139, 92, 246, 0.08), transparent 25%);
-            background-attachment: fixed;
+        body {
+            background-color: var(--bg-color);
             font-family: 'Outfit', sans-serif;
             color: #F8FAFC;
+        }
+        /* Fixed gradient layer (background-attachment: fixed janks on iOS Safari) */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            z-index: -1;
+            pointer-events: none;
+            background-image:
+                radial-gradient(circle at 15% 50%, rgba(59, 130, 246, 0.08), transparent 25%),
+                radial-gradient(circle at 85% 30%, rgba(139, 92, 246, 0.08), transparent 25%);
         }
 
         /* Glassmorphism Navbar */
@@ -92,10 +109,12 @@
             transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
             overflow: hidden;
         }
-        .card:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 12px 40px rgba(0,0,0,0.4);
-            border-color: rgba(255, 255, 255, 0.15);
+        @media (hover: hover) {
+            .card:hover {
+                transform: translateY(-4px);
+                box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+                border-color: rgba(255, 255, 255, 0.15);
+            }
         }
         .card-header {
             background: rgba(255,255,255,0.02) !important;
@@ -202,6 +221,165 @@
         ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.25); }
 
+        /* ===================== iPhone / mobile layer ===================== */
+        html { -webkit-text-size-adjust: 100%; }
+        * { -webkit-tap-highlight-color: transparent; }
+
+        /* iOS-style bottom tab bar (shown below the lg breakpoint) */
+        .ios-tabbar {
+            position: fixed;
+            left: 0; right: 0; bottom: 0;
+            z-index: 1040;
+            display: flex;
+            background: rgba(11, 15, 25, 0.85);
+            backdrop-filter: blur(20px) saturate(180%);
+            -webkit-backdrop-filter: blur(20px) saturate(180%);
+            border-top: 1px solid var(--border-color);
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+        .ios-tabbar .tab-item {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 3px;
+            padding: 8px 0 6px;
+            min-height: var(--ios-tabbar-h);
+            color: #64748B;
+            text-decoration: none;
+            font-size: 0.65rem;
+            font-weight: 600;
+            letter-spacing: 0.2px;
+            background: none;
+            border: none;
+            transition: color 0.2s ease;
+        }
+        .ios-tabbar .tab-item i { font-size: 1.25rem; }
+        .ios-tabbar .tab-item.active { color: #60A5FA; }
+        .ios-tabbar .tab-item:active { opacity: 0.6; }
+
+        /* iOS-style "More" bottom sheet */
+        .ios-sheet-backdrop {
+            position: fixed;
+            inset: 0;
+            z-index: 1050;
+            background: rgba(0, 0, 0, 0.5);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+        .ios-sheet-backdrop.open { opacity: 1; pointer-events: auto; }
+        .ios-sheet {
+            position: fixed;
+            left: 0; right: 0; bottom: 0;
+            z-index: 1060;
+            background: rgba(17, 24, 39, 0.97);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border: 1px solid var(--border-color);
+            border-bottom: none;
+            border-radius: 20px 20px 0 0;
+            padding: 8px 16px calc(16px + env(safe-area-inset-bottom));
+            transform: translateY(105%);
+            transition: transform 0.35s cubic-bezier(0.32, 0.72, 0, 1);
+            will-change: transform;
+        }
+        .ios-sheet.open { transform: translateY(0); }
+        .ios-sheet-handle {
+            width: 36px; height: 5px;
+            border-radius: 3px;
+            background: rgba(255, 255, 255, 0.2);
+            margin: 4px auto 12px;
+        }
+        .ios-sheet-item {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 13px 6px;
+            min-height: 48px;
+            color: #E2E8F0;
+            text-decoration: none;
+            font-weight: 500;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        }
+        .ios-sheet-item:last-child { border-bottom: none; }
+        .ios-sheet-item:active { background: rgba(255, 255, 255, 0.05); }
+        .ios-sheet-item.active { color: #60A5FA; }
+        .ios-sheet-item i:first-child {
+            width: 34px; height: 34px;
+            border-radius: 9px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(59, 130, 246, 0.12);
+            color: #60A5FA;
+            font-size: 0.95rem;
+        }
+        .ios-sheet-item .chevron { margin-left: auto; color: #475569; font-size: 0.8rem; }
+
+        @media (max-width: 991.98px) {
+            /* Bottom tab bar replaces the collapsing top nav */
+            .navbar-toggler, #navbarNav { display: none !important; }
+            .navbar {
+                position: sticky;
+                top: 0;
+                z-index: 1030;
+                padding: 0.6rem 0;
+                padding-top: calc(0.6rem + env(safe-area-inset-top));
+                margin-bottom: 1.25rem !important;
+                /* Chromium mirrors fixed-element pixels into a blurred sticky
+                   backdrop, so blur the navbar only on iOS Safari */
+                background: rgba(11, 15, 25, 0.96) !important;
+                backdrop-filter: none;
+                -webkit-backdrop-filter: none;
+            }
+            @supports (-webkit-touch-callout: none) {
+                .navbar {
+                    background: rgba(11, 15, 25, 0.8) !important;
+                    backdrop-filter: blur(16px);
+                    -webkit-backdrop-filter: blur(16px);
+                }
+            }
+            .navbar .container-fluid { justify-content: center; }
+            .navbar-brand { font-size: 1.15rem; margin-right: 0; }
+
+            body { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
+            .container-fluid {
+                padding-left: max(1rem, env(safe-area-inset-left));
+                padding-right: max(1rem, env(safe-area-inset-right));
+            }
+
+            h2 { font-size: 1.35rem; }
+            .stat-card { padding: 1rem; }
+            .stat-card .value { font-size: 1.6rem; }
+
+            /* 16px inputs stop iOS Safari from zooming on focus */
+            .form-control, .form-select { font-size: 16px; min-height: 44px; }
+            .btn {
+                min-height: 44px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            /* Wide tables pan horizontally instead of crushing the layout */
+            .card-body { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+            .card-body > .table { min-width: 100%; width: max-content; }
+            .table > thead > tr > th, .table > tbody > tr > td { white-space: nowrap; }
+            .table > thead > tr > th:first-child, .table > tbody > tr > td:first-child {
+                position: sticky;
+                left: 0;
+                z-index: 2;
+                background: #101623;
+            }
+            .table > thead > tr > th { padding: 0.75rem; }
+            .table > tbody > tr > td { padding: 0.9rem 0.75rem; }
+
+            /* Let header rows with action buttons wrap on narrow screens */
+            .d-flex.justify-content-between { flex-wrap: wrap; row-gap: 0.5rem; }
+        }
+
         {% block style %}{% endblock %}
     </style>
 </head>
@@ -234,6 +412,30 @@
         {% block content %}{% endblock %}
     </div>
 
+    <!-- iPhone bottom tab bar -->
+    <nav class="ios-tabbar d-lg-none" aria-label="Primary">
+        <a class="tab-item" href="/"><i class="fa-solid fa-chart-line"></i><span>Dashboard</span></a>
+        <a class="tab-item" href="/foresight"><i class="fa-solid fa-arrow-trend-up"></i><span>Foresight</span></a>
+        <a class="tab-item" href="/screener"><i class="fa-solid fa-magnifying-glass-chart"></i><span>Screener</span></a>
+        <a class="tab-item" href="/portfolio"><i class="fa-solid fa-briefcase"></i><span>Portfolio</span></a>
+        <button class="tab-item" id="moreTab" type="button" aria-controls="moreSheet" aria-expanded="false">
+            <i class="fa-solid fa-ellipsis"></i><span>More</span>
+        </button>
+    </nav>
+
+    <!-- "More" bottom sheet -->
+    <div class="ios-sheet-backdrop d-lg-none" id="sheetBackdrop"></div>
+    <div class="ios-sheet d-lg-none" id="moreSheet" role="dialog" aria-label="More pages">
+        <div class="ios-sheet-handle"></div>
+        <a class="ios-sheet-item" href="/backtest"><i class="fa-solid fa-clock-rotate-left"></i>Backtest<i class="fa-solid fa-chevron-right chevron"></i></a>
+        <a class="ios-sheet-item" href="/stat-arb"><i class="fa-solid fa-scale-balanced"></i>Stat-Arb<i class="fa-solid fa-chevron-right chevron"></i></a>
+        <a class="ios-sheet-item" href="/analysis"><i class="fa-solid fa-wave-square"></i>Analysis<i class="fa-solid fa-chevron-right chevron"></i></a>
+        <a class="ios-sheet-item" href="/alerts"><i class="fa-solid fa-bell"></i>Alerts<i class="fa-solid fa-chevron-right chevron"></i></a>
+        <a class="ios-sheet-item" href="/watchlist"><i class="fa-solid fa-star"></i>Watchlist<i class="fa-solid fa-chevron-right chevron"></i></a>
+        <a class="ios-sheet-item" href="/correlation"><i class="fa-solid fa-diagram-project"></i>Correlation<i class="fa-solid fa-chevron-right chevron"></i></a>
+        <a class="ios-sheet-item" href="/reports"><i class="fa-solid fa-file-lines"></i>Reports<i class="fa-solid fa-chevron-right chevron"></i></a>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         // Highlight active nav link
@@ -242,6 +444,34 @@
                 link.classList.add('active');
             }
         });
+
+        // iPhone tab bar: active state + "More" sheet
+        (function () {
+            const sheet = document.getElementById('moreSheet');
+            const backdrop = document.getElementById('sheetBackdrop');
+            const moreTab = document.getElementById('moreTab');
+
+            function toggleSheet(open) {
+                sheet.classList.toggle('open', open);
+                backdrop.classList.toggle('open', open);
+                moreTab.setAttribute('aria-expanded', open);
+            }
+            moreTab.addEventListener('click', () => toggleSheet(!sheet.classList.contains('open')));
+            backdrop.addEventListener('click', () => toggleSheet(false));
+
+            const path = window.location.pathname;
+            let currentInSheet = false;
+            document.querySelectorAll('.ios-sheet-item').forEach(item => {
+                if (item.getAttribute('href') === path) {
+                    item.classList.add('active');
+                    currentInSheet = true;
+                }
+            });
+            document.querySelectorAll('.ios-tabbar a.tab-item').forEach(item => {
+                if (item.getAttribute('href') === path) item.classList.add('active');
+            });
+            if (currentInSheet) moreTab.classList.add('active');
+        })();
     </script>
     {% block scripts %}{% endblock %}
 </body>

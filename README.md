@@ -1,4 +1,46 @@
-# Iran Investment Tracker — Live Web Dashboard
+# drrrd Agent Desk — Alpaca AI Trading Agent
+
+An autonomous, **paper-only SPY options agent** built for the Alpaca AI Trading
+Agents Hackathon. The application hosts Alpaca's official v2 MCP server inside
+its Python agent loop, supports Claude or OpenAI, visualizes every decision, and
+uses deterministic risk gates before any order can be submitted.
+
+## Hackathon demo (`/agent`)
+
+The smallest viable demo is one end-to-end decision:
+
+1. **Observe** — the selected model uses read-only Alpaca MCP tools for the
+   competition account, clock, SPY snapshot, option chain, quotes and orders.
+2. **Reason** — it returns one typed proposal: a long SPY call, a long SPY put,
+   or `SKIP`.
+3. **Veto** — Python independently enforces paper mode, one contract, limit
+   execution, buy-to-open only, market-open verification, 7–45 DTE, a $250 maximum loss, a confidence
+   floor and a one-order-per-day throttle.
+4. **Execute** — only an approved proposal reaches MCP's `place_option_order`,
+   with an idempotent client order ID. Every step is appended to an audit log.
+
+```bash
+cp .env.example .env              # fill paper and one model provider key
+set -a; source .env; set +a
+pip install -r requirements.txt
+python main.py
+# open http://localhost:5000/agent
+```
+
+`ALPACA_AUTOTRADE_ENABLED=false` is the safe default and produces an approved
+dry run. Set it to `true` only on the dedicated competition paper account to
+allow autonomous paper option orders. Live trading is structurally disabled:
+the MCP subprocess is always launched with `ALPACA_PAPER_TRADE=true`.
+The execution endpoint also requires `AGENT_RUN_TOKEN`, preventing visitors to
+the public demo from triggering a run.
+
+Submission assets: [one-page write-up](HACKATHON_SUBMISSION.md),
+[90-second demo script](DEMO_SCRIPT.md), and
+[final checklist](SUBMISSION_CHECKLIST.md).
+
+---
+
+## Original project — Iran Investment Tracker
 
 A full-stack web application that automatically tracks all 36 tickers from the Iran Regime Change Investment Plan. Live prices, auto-refresh, alerts, CSV export, and a production-ready dashboard.
 

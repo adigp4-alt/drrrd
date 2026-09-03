@@ -27,10 +27,11 @@ def create_app(start_background=True):
     # Register blueprints
     from app.routes import (
         dashboard, portfolio, analysis, alerts_api, watchlist, export,
-        screener, backtest, stat_arb, forecast, pwa,
+        screener, backtest, stat_arb, forecast, pwa, agent,
     )
     app.register_blueprint(pwa.bp)
     app.register_blueprint(forecast.bp)
+    app.register_blueprint(agent.bp)
     app.register_blueprint(dashboard.bp)
     app.register_blueprint(portfolio.bp)
     app.register_blueprint(analysis.bp)

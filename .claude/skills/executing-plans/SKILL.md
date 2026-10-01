@@ -11,12 +11,16 @@ Load plan, review critically, execute all tasks, report when complete.
 
 **Announce at start:** "I'm using the executing-plans skill to implement this plan."
 
-**Note:** Tell your human partner that Superpowers works much better with access to subagents (Claude Code, Codex CLI, Codex App, Copilot CLI, and Gemini CLI all qualify; see the per-platform tool refs in `../using-superpowers/references/`). If subagents are available, use superpowers:subagent-driven-development instead of this skill.
+Use this workflow with or without subagents. For genuinely independent work,
+use the included [dispatching-parallel-agents](../dispatching-parallel-agents/SKILL.md)
+skill when delegation is available and permitted. Execute dependent tasks in
+order and review the results before continuing; without subagents, execute
+the tasks sequentially.
 
 ## The Process
 
 ### Step 1: Load and Review Plan
-1. Ensure an isolated workspace: use superpowers:using-git-worktrees to create one or verify the existing one
+1. Verify the repository, branch and working-tree status (`git rev-parse --show-toplevel`, `git branch --show-current`, `git status --short`). Reuse the hosted checkout or existing isolated worktree when available. Otherwise create a separate feature branch or worktree with Git before editing. Preserve unrelated changes; never reset or discard them to obtain a clean workspace.
 2. Read plan file
 3. Review critically - identify any questions or concerns about the plan
 4. If concerns: Raise them with your human partner before starting
@@ -34,7 +38,7 @@ For each task:
 
 After all tasks complete and verified:
 - Announce: "I'm using the finishing-a-development-branch skill to complete this work."
-- **REQUIRED SUB-SKILL:** Use superpowers:finishing-a-development-branch
+- **REQUIRED SUB-SKILL:** Use the included [finishing-a-development-branch](../finishing-a-development-branch/SKILL.md) skill
 - Follow that skill to verify tests, present options, execute choice
 
 ## When to Stop and Ask for Help

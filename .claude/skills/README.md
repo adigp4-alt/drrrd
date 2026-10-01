@@ -10,6 +10,11 @@ A skill is a directory with a `SKILL.md` whose frontmatter carries a `name` and 
 description matches the task at hand. Write new ones with the `writing-skills`
 skill below.
 
+Invoke project skills by their local frontmatter names, such as
+`executing-plans`. If a skill invocation tool is unavailable, read
+`.claude/skills/<name>/SKILL.md` directly. The planning and execution workflow
+uses the skills included here and does not require a Superpowers plugin.
+
 ## What's here
 
 ### Engineering discipline
@@ -69,6 +74,13 @@ Changes made on import:
   resolves from the repo root (`.claude/skills/brainstorming/visual-companion.md`).
 - `writing-skills/SKILL.md` — the note on where skills live now describes this
   repo's layout, replacing two links to a skill that was not imported.
+- Cross-skill references use local names rather than the upstream plugin's
+  namespace, including references in the testing guides.
+- `writing-plans` and `executing-plans` — both execution handoffs use the
+  included `executing-plans` skill. Workspace checks use the existing hosted
+  checkout or ordinary Git branches/worktrees; optional independent work uses
+  `dispatching-parallel-agents`. Removed required handoffs to omitted skills
+  and the pointer to the omitted platform-reference directory.
 
 Not imported, deliberately: `using-superpowers` (a session-wide directive to
 invoke a skill before every response, which conflicts with how this repo is

@@ -13,7 +13,10 @@ Assume they are a skilled developer, but know almost nothing about our toolset o
 
 **Announce at start:** "I'm using the writing-plans skill to create the implementation plan."
 
-**Context:** If working in an isolated worktree, it should have been created via the `superpowers:using-git-worktrees` skill at execution time.
+**Context:** Execute in a hosted checkout, an existing isolated worktree, or a
+separate feature branch/worktree created with Git. The included
+[executing-plans](../executing-plans/SKILL.md) skill verifies the repository,
+branch and working-tree status before edits and preserves unrelated changes.
 
 **Save plans to:** `docs/superpowers/plans/YYYY-MM-DD-<feature-name>.md`
 - (User preferences for plan location override this default)
@@ -58,7 +61,7 @@ independently testable deliverable.
 ```markdown
 # [Feature Name] Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Read `.claude/skills/executing-plans/SKILL.md` and use `executing-plans` to implement this plan task-by-task with review checkpoints. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** [One sentence describing what this builds]
 
@@ -156,16 +159,15 @@ After saving the plan, offer execution choice:
 
 **"Plan complete and saved to `docs/superpowers/plans/<filename>.md`. Two execution options:**
 
-**1. Subagent-Driven (recommended)** - I dispatch a fresh subagent per task, review between tasks, fast iteration
+**1. Execute here** - Continue in this session using executing-plans, with verification and review checkpoints
 
-**2. Inline Execution** - Execute tasks in this session using executing-plans, batch execution with checkpoints
+**2. Execute in a separate session** - Open the plan in an isolated checkout and use executing-plans with the same checkpoints
 
 **Which approach?"**
 
-**If Subagent-Driven chosen:**
-- **REQUIRED SUB-SKILL:** Use superpowers:subagent-driven-development
-- Fresh subagent per task + two-stage review
-
-**If Inline Execution chosen:**
-- **REQUIRED SUB-SKILL:** Use superpowers:executing-plans
-- Batch execution with checkpoints for review
+**For either choice:**
+- **REQUIRED SUB-SKILL:** Use the included [executing-plans](../executing-plans/SKILL.md) skill
+- Execute dependent tasks in order, with verification and review checkpoints
+- When delegation is available and permitted, use the included
+  [dispatching-parallel-agents](../dispatching-parallel-agents/SKILL.md) skill
+  only for independent work; execution does not require subagents

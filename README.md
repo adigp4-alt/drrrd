@@ -1,5 +1,7 @@
 # Iran Investment Tracker — Live Web Dashboard
 
+> **Project showcase:** A Python/Flask research and dashboard project. Live deployment and predictive results are unverified. [Explore the source features, scope, and wider portfolio](./PROJECT-SHOWCASE.md).
+
 A full-stack web application that automatically tracks all 36 tickers from the Iran Regime Change Investment Plan. Live prices, auto-refresh, alerts, CSV export, and a production-ready dashboard.
 
 ## 🔮 ForesightTape — Next-Session Forecast Engine (`/foresight`)

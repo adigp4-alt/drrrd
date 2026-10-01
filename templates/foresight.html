@@ -193,9 +193,10 @@
 .ft-tab[aria-selected="true"] { background: var(--ft-surface-2); color: var(--ft-ink); }
 
 @media (max-width: 719px) {
-  .ft-tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 1030; margin: 0;
+  /* Sits directly above the app-wide tab bar, which owns the safe-area inset. */
+  .ft-tabs { position: fixed; left: 0; right: 0; z-index: 1030; margin: 0;
+    bottom: calc(var(--ios-tabbar-h, 0px) + env(safe-area-inset-bottom));
     border-radius: 0; border-width: 1px 0 0; padding: 0.3rem 0.4rem;
-    padding-bottom: calc(0.3rem + env(safe-area-inset-bottom));
     background: rgba(11, 15, 25, 0.94); backdrop-filter: blur(16px); }
   .ft-tab { min-height: var(--ft-tap); font-size: 0.78rem; padding: 0 0.5rem; }
 }

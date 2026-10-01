@@ -72,21 +72,29 @@ python -m flask --app 'app:create_app(start_background=False)' run
 Open `http://127.0.0.1:5000/contact-cleanup`. The app reads environment variables
 at startup; it does not load a `.env` file automatically.
 
-## One remaining external integration
+## Portfolio integration and remaining activation
 
-The public portfolio at
+The separately maintained public portfolio at
 [practical-data-tools.pulsargeek.chatgpt.site](https://practical-data-tools.pulsargeek.chatgpt.site)
-is a separately maintained Sites project; its source and deployment are not in
-this GitHub repository. A repository commit cannot change its CTA.
+now has the same disabled-by-default handoff on its own service section.
+PR #33 is merged. Portfolio version 3 was published successfully on October 1,
+2026; it does not require a separate Flask deployment.
 
-**Activate the handoff on that portfolio:** once this repo change is merged and
-deployed, the portfolio maintainer must point its payment CTA to the actual
-deployed `/contact-cleanup` page, with the seller's real $49 hosted-payment URL
-verified, configured, and enabled on the Flask host. Keep its inquiry CTA
-labeled **Ask about fit — inquiry only**, and keep payment unavailable until
-that destination exists. If the portfolio cannot use the Flask deployment,
-port the same disabled-by-default gate to its own source instead.
+The portfolio uses public `dist/checkout-config.json` settings: `payment_url`
+is empty and `enabled` is false. Its payment button starts disabled, reads the
+configuration without browser caching, and rechecks it before every handoff.
+Missing/invalid configuration, failed requests, and recognizable Stripe sandbox
+links keep checkout unavailable. Its seven handoff tests passed before publishing.
+The Flask environment settings above still apply to deployments of this repo;
+they do not configure the separately hosted static portfolio.
 
-Public status remains **inquiries open; checkout unavailable** until that
-external activation has been verified. Do not label the site checkout live
-merely because this PR is merged or local tests pass.
+**One remaining activation requirement:** provide and verify the seller's live
+hosted payment URL for the agreed $49 USD one-time service, set it in the
+portfolio's configuration, enable it, and republish. A connected live payment
+account can be used to create that link. Only a Stripe test sandbox was available
+during implementation, so no real destination was configured.
+
+Public status remains **inquiries open; checkout unavailable**. The published
+portfolio is verified as deployed; neither live checkout nor a completed payment
+has been verified. Inquiry comments, clicks, and return visits remain distinct
+from provider-confirmed paid orders.

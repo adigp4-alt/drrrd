@@ -2,6 +2,8 @@
 
 > **Project showcase:** A Python/Flask research and dashboard project. Live deployment and predictive results are unverified. [Explore the source features, scope, and wider portfolio](./PROJECT-SHOWCASE.md).
 
+> **Contact CSV cleanup:** [Ask about fit — inquiry only](https://github.com/adigp4-alt/drrrd/issues/32) for the proposed $49 USD service. The app's `/contact-cleanup` page offers a [configurable payment handoff](./docs/contact-cleanup-checkout.md), disabled by default. No live checkout or payment is verified; inquiries do not place paid orders.
+
 A full-stack web application that automatically tracks all 36 tickers from the Iran Regime Change Investment Plan. Live prices, auto-refresh, alerts, CSV export, and a production-ready dashboard.
 
 ## 🔮 ForesightTape — Next-Session Forecast Engine (`/foresight`)
@@ -252,6 +254,8 @@ iran-tracker-web/
 | `/api/history` | GET | 30-day price history for sparklines (JSON) |
 | `/api/refresh` | POST | Force an immediate data refresh |
 | `/api/download/csv` | GET | Download full snapshot history as CSV |
+| `/contact-cleanup` | GET | Cleanup scope, inquiry link, and payment availability |
+| `/contact-cleanup/checkout` | GET | Hosted-payment redirect when explicitly enabled; otherwise 503 |
 
 ---
 
@@ -264,6 +268,8 @@ iran-tracker-web/
 | `DATA_DIR` | No | Where SQLite and CSV snapshots are written (default `data`). Point at a mounted volume to persist across redeploys. |
 | `MARKET_DATA_SOURCE` | No | Which price providers to use, in order. `auto` (default) = Yahoo chart API → yfinance → Stooq, each asked only for what the previous one missed. `yahoo` drops Stooq; `stooq`, `chart` and `yfinance` each force a single provider (useful for isolating a fault). |
 | `PORT` | No | Port to bind (default `5000`). Most hosts set this for you. |
+| `CONTACT_CLEANUP_PAYMENT_URL` | No | Real public HTTPS hosted-payment URL for the $49 USD offer; empty by default. [Activation guide](./docs/contact-cleanup-checkout.md). |
+| `CONTACT_CLEANUP_CHECKOUT_ENABLED` | No | Defaults to `false`. Set to `true` only after verifying the configured payment destination. |
 
 ---
 

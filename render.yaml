@@ -13,6 +13,12 @@ services:
     # research through Claude and can exceed gunicorn's 30s default.
     startCommand: gunicorn main:app --bind 0.0.0.0:$PORT --workers 1 --threads 8 --timeout 300
     envVars:
+      # Optional contact-cleanup handoff. Leave disabled until the real $49 USD
+      # hosted-payment destination is verified; see docs/contact-cleanup-checkout.md.
+      # Set these manually in the host's environment and restart/redeploy:
+      # CONTACT_CLEANUP_PAYMENT_URL=<seller's verified HTTPS payment link>
+      # CONTACT_CLEANUP_CHECKOUT_ENABLED=true
+
       # Enables the Claude catalyst overlay on /foresight. Leave unset to run
       # the forecast board in quant-only mode. Set the value in the Render
       # dashboard, not here — never commit a key.

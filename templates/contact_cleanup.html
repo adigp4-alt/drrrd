@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>Contact CSV cleanup — Practical Data Tools</title>
+  <style>
+    :root { color-scheme: light; font-family: system-ui, sans-serif; color: #182b26; background: #f4f6f1; }
+    * { box-sizing: border-box; }
+    body { margin: 0; line-height: 1.6; }
+    main { max-width: 740px; margin: 0 auto; padding: 40px 20px; }
+    h1 { line-height: 1.15; font-size: clamp(2rem, 7vw, 3rem); margin: 12px 0; }
+    h2 { font-size: 1.2rem; margin-top: 0; }
+    a { color: #185b48; text-underline-offset: 3px; }
+    .price { font-size: 1.5rem; font-weight: 700; }
+    section { background: white; border: 1px solid #cbd5c8; border-radius: 12px; padding: 24px; margin: 24px 0; }
+    .action { display: inline-block; border: 0; border-radius: 6px; padding: 12px 18px; font: inherit; font-weight: 650; }
+    a.action { color: white; background: #185b48; text-decoration: none; }
+    button:disabled { color: #4a564c; background: #e3e8df; cursor: not-allowed; }
+    a:focus-visible { outline: 3px solid #b75a12; outline-offset: 4px; }
+    .note { color: #4a564c; font-size: 0.95rem; }
+  </style>
+</head>
+<body>
+  <main>
+    <a href="{{ portfolio_url }}">Practical Data Tools · View the portfolio and free preview</a>
+    <h1>Contact CSV cleanup</h1>
+    <p class="price">$49 USD · one agreed cleanup job</p>
+    <p>Keep your original file, remove confirmed exact duplicates, and get a review
+      queue for incomplete or conflicting records.</p>
+
+    <section aria-labelledby="scope-title">
+      <h2 id="scope-title">What the service includes</h2>
+      <p>One compatible CSV, up to <strong>2,000 records and 15 columns</strong>,
+        agreed cleanup rules, exact-duplicate handling, a review queue, an audit,
+        and one revision within scope.</p>
+      <p>Six fields must be mapped: name, email, phone, company, city, and country.
+        No email-deliverability verification, enrichment, scraping, or automatic
+        merging of uncertain matches.</p>
+      <p>Target delivery: 24 hours after a usable file, rules, and payment are
+        confirmed. Agree a private file-transfer and delivery channel first.</p>
+    </section>
+
+    <section aria-labelledby="inquiry-title">
+      <h2 id="inquiry-title">1. Confirm the fit</h2>
+      <p>Describe your approximate row count, column headers, desired output, and
+        country context for phone formatting. Wait for scope confirmation before paying.</p>
+      <a class="action" href="{{ inquiry_url }}">Ask about fit — inquiry only</a>
+      <p class="note">GitHub sign-in required. Comments are public. Do not upload a
+        contact CSV or post names, email addresses, phone numbers, or credentials.
+        Use schema descriptions or fictional examples.</p>
+      <p><strong>A comment is an inquiry. It does not place an order or pay for anything.</strong></p>
+    </section>
+
+    <section aria-labelledby="payment-title">
+      <h2 id="payment-title">2. Pay after scope is agreed</h2>
+      {% if checkout_available %}
+      <p id="checkout-status">A payment link is available. Continue only after your
+        scope is confirmed; check the service, seller, currency, and total on the payment page.</p>
+      <a class="action" href="{{ url_for('contact_cleanup.checkout') }}" aria-describedby="checkout-status">Continue to payment — $49 USD</a>
+      {% else %}
+      <p id="checkout-status"><strong>Checkout unavailable. Inquiries are open; paid orders are not being accepted through this page.</strong></p>
+      <button class="action" type="button" disabled aria-describedby="checkout-status">Payment unavailable</button>
+      {% endif %}
+      <p>Opening a payment link or returning to this page does not confirm payment.
+        A paid order requires the payment provider's confirmation and the seller's
+        confirmation of your agreed scope. Keep your receipt and share payment
+        references only through the agreed private channel.</p>
+    </section>
+    <p class="note">The portfolio uses fictional examples, not client results or earnings.</p>
+  </main>
+</body>
+</html>

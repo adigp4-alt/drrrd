@@ -1,5 +1,6 @@
 """Flask application factory."""
 
+import os
 import threading
 
 from flask import Flask
@@ -20,6 +21,15 @@ def create_app(start_background=True):
     process. Production calls take the default and are unaffected.
     """
     app = Flask(__name__, template_folder="../templates")
+    # A public hosted-payment URL, never a provider API key. Checkout stays off
+    # until the operator verifies the destination and explicitly enables it.
+    app.config["CONTACT_CLEANUP_PAYMENT_URL"] = os.environ.get(
+        "CONTACT_CLEANUP_PAYMENT_URL", ""
+    )
+    app.config["CONTACT_CLEANUP_CHECKOUT_ENABLED"] = (
+        os.environ.get("CONTACT_CLEANUP_CHECKOUT_ENABLED", "").strip().lower()
+        == "true"
+    )
 
     # Initialize database
     init_db()
@@ -27,8 +37,9 @@ def create_app(start_background=True):
     # Register blueprints
     from app.routes import (
         dashboard, portfolio, analysis, alerts_api, watchlist, export,
-        screener, backtest, stat_arb, forecast, pwa,
+        screener, backtest, stat_arb, forecast, pwa, contact_cleanup,
     )
+    app.register_blueprint(contact_cleanup.bp)
     app.register_blueprint(pwa.bp)
     app.register_blueprint(forecast.bp)
     app.register_blueprint(dashboard.bp)

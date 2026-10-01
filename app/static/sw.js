@@ -22,7 +22,7 @@
  * Never cache POSTs, and never cache an error response.
  */
 
-const VERSION = "ft-v1";
+const VERSION = "ft-v2";
 const SHELL_CACHE = `${VERSION}-shell`;
 const DATA_CACHE = `${VERSION}-data`;
 const ASSET_CACHE = `${VERSION}-assets`;
@@ -120,6 +120,9 @@ self.addEventListener("fetch", (event) => {
   // Diagnostics must always reflect reality — a cached "healthy" verdict during
   // an outage would be actively misleading.
   if (url.pathname === "/foresight/api/diagnostics") return;
+
+  // Payment availability and redirects must never fall back to stale HTML.
+  if (url.pathname === "/contact-cleanup" || url.pathname.startsWith("/contact-cleanup/")) return;
 
   if (isForecastApi(url)) {
     event.respondWith(networkFirst(request, DATA_CACHE, true));

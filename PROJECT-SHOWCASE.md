@@ -13,7 +13,7 @@ This repository is designated as a GitHub template and contains application modu
 
 ## Project collection
 
-- [Contact CSV cleanup and dashboard portfolio](https://practical-data-tools.pulsargeek.chatgpt.site): verified fictional examples, review queues, retained originals, and documented cleanup scope. **The portfolio currently requires owner access; public release is pending.** The proposed $49 contact-cleanup service has no live checkout.
+- [Contact CSV cleanup and dashboard portfolio](https://practical-data-tools.pulsargeek.chatgpt.site): verified fictional examples, review queues, retained originals, and documented cleanup scope. **The portfolio is public and available to view.** The proposed $49 contact-cleanup service has no live checkout.
 - [Market Research Dashboard / ForesightTape](https://github.com/adigp4-alt/drrrd): dashboard, forecast evaluation, and reporting source.
 - [Alpaca integration prototype](https://github.com/adigp4-alt/alpaca-ai-agen): a compact rule-based Python/API experiment.
 - [OpenClaw fork](https://github.com/adigp4-alt/openclaw): attributed fork of [openclaw/openclaw](https://github.com/openclaw/openclaw). Fork-specific adaptations and deployment are not established by this showcase.

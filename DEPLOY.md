@@ -1,8 +1,9 @@
 # Deploying to Render
 
-The repo ships a working `render.yaml`, so Render provisions the service for
-you. Total time is about five minutes, and everything below happens in the
-Render dashboard.
+The repo ships a `render.yaml` Blueprint for provisioning a service. Existing
+services keep their saved build and start commands unless a linked Blueprint
+sync updates them; pushing a commit alone does not apply `render.yaml` settings.
+All settings below are in the Render dashboard.
 
 ---
 
@@ -21,6 +22,31 @@ your phone or laptop.
 
 > On the free plan the service sleeps after 15 minutes idle, so the first visit
 > after a nap takes ~30 seconds to wake. That is normal, not a failure.
+
+### Repair an existing service
+
+Open the existing service's **Settings → Build & Deploy** and compare its saved
+values with `render.yaml` before creating another service:
+
+| Setting | Value |
+|---|---|
+| Runtime | Python 3 |
+| Branch | `claude/add-claude-documentation-StD8a` (the forecast app's default branch) |
+| Root Directory | Leave empty (repository root) |
+| Build Command | `pip install -r requirements.txt` |
+| Start Command | `gunicorn main:app --bind 0.0.0.0:$PORT --workers 1 --threads 8 --timeout 300` |
+
+`main.py` exports the Flask application; the `app` package exports its factory,
+so `gunicorn app:app` fails to load it. `Run` is not a start command supplied by
+this repository. Neither `poetry install` nor `poetry run python main.py` is
+appropriate: this project uses `requirements.txt` and has no `pyproject.toml`.
+Keep one worker to avoid duplicate schedulers and forecast grading.
+
+Save corrected settings and inspect the resulting deploy. Confirm the logs
+show the expected build/start commands and that `/foresight` returns HTTP 200.
+If a build still fails, record the selected Python version and the first error
+in the build log; an exit status alone does not identify a dependency problem.
+Python version controls are documented [by Render](https://render.com/docs/python-version).
 
 ---
 
@@ -117,7 +143,7 @@ Open `/foresight` and:
 | **quant-only mode** badge | `ANTHROPIC_API_KEY` is not set — see Step 2. |
 | Accuracy tab empty after redeploy | Storage is ephemeral — see Step 3. |
 | Scan times out | Gunicorn's timeout is already raised to 300s in `render.yaml`. If you changed the start command, put `--timeout 300` back; catalyst scans run web research and exceed the 30s default. |
-| Build fails on dependencies | Confirm the build command is `pip install -r requirements.txt`. |
+| Build or startup fails after every commit | Compare the service's saved commands with the existing-service settings above. For a remaining dependency error, inspect the first failing package and selected Python version in the build log. |
 
 ---
 

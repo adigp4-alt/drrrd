@@ -18,6 +18,22 @@ services:
       # dashboard, not here — never commit a key.
       - key: ANTHROPIC_API_KEY
         sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: AGENT_MODEL_PROVIDER
+        value: anthropic
+      - key: ALPACA_API_KEY
+        sync: false
+      - key: ALPACA_SECRET_KEY
+        sync: false
+      # The server and Python gate both enforce paper-only execution. Flip the
+      # arm switch only after a successful research-only run.
+      - key: ALPACA_PAPER_TRADE
+        value: "true"
+      - key: ALPACA_AUTOTRADE_ENABLED
+        value: "false"
+      - key: AGENT_RUN_TOKEN
+        generateValue: true
 
       # Durable storage for the forecast accuracy ledger.
       #

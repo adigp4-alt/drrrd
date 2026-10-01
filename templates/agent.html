@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Agent Desk · drrrd{% endblock %}
+{% block style %}
+.agent-shell{max-width:1180px;margin:auto}.agent-hero{display:grid;grid-template-columns:1.5fr 1fr;gap:1.2rem;align-items:stretch}
+.agent-kicker{color:#60a5fa;text-transform:uppercase;letter-spacing:.14em;font-size:.78rem;font-weight:700}
+.agent-title{font-size:clamp(2.1rem,5vw,4.4rem);line-height:.95;margin:.55rem 0 1rem}.muted{color:#94a3b8}
+.status-dot{display:inline-block;width:.6rem;height:.6rem;border-radius:99px;background:#10b981;box-shadow:0 0 14px #10b981;margin-right:.45rem}
+.flow{display:grid;grid-template-columns:repeat(4,1fr);gap:.6rem;margin:1rem 0}.flow-step{padding:1rem;border:1px solid var(--border-color);border-radius:12px;background:rgba(255,255,255,.025)}
+.flow-step b{display:block;color:#60a5fa;font-size:.74rem;letter-spacing:.08em;margin-bottom:.3rem}.metric{font-size:2rem;font-weight:700}
+.gate{display:flex;gap:.7rem;align-items:flex-start;padding:.7rem 0;border-bottom:1px solid var(--border-color)}.gate:last-child{border:0}
+.gate-icon{width:1.5rem;height:1.5rem;border-radius:50%;display:grid;place-items:center;background:rgba(16,185,129,.18);color:#10b981;font-weight:800}.gate-icon.fail{background:rgba(244,63,94,.16);color:#f43f5e}
+.trace-pill{display:inline-block;padding:.3rem .55rem;margin:.15rem;border-radius:99px;background:rgba(59,130,246,.13);border:1px solid rgba(59,130,246,.28);font-size:.78rem}.json{white-space:pre-wrap;font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;color:#cbd5e1;max-height:340px;overflow:auto}
+@media(max-width:800px){.agent-hero,.flow{grid-template-columns:1fr}.agent-title{font-size:2.6rem}}
+{% endblock %}
+{% block content %}
+<main class="agent-shell pb-5">
+  <section class="agent-hero mb-4">
+    <div class="card p-4 p-lg-5">
+      <div class="agent-kicker">Alpaca AI Trading Agents Hackathon</div>
+      <h1 class="agent-title">A trading agent<br>that knows when to say no.</h1>
+      <p class="muted mb-4">Live SPY options research through Alpaca MCP. Model-generated thesis. Deterministic Python risk gates. One contract, $250 maximum loss, paper account only.</p>
+      <div><span class="status-dot"></span><span id="configState">{{ "Credentials ready" if configured else "Configuration required" }}</span></div>
+    </div>
+    <div class="card p-4 d-flex flex-column justify-content-between">
+      <div><div class="muted small text-uppercase">Execution boundary</div><div class="metric">$250</div><div class="muted">maximum defined loss per run</div></div>
+      <div class="my-4"><div class="muted small text-uppercase">Universe</div><div class="metric">SPY</div><div class="muted">long calls or puts only</div></div>
+      <label class="muted small mb-1" for="runToken">RUN TOKEN</label>
+      <input class="form-control mb-3" id="runToken" type="password" autocomplete="off" placeholder="Deployment run token">
+      <button class="btn btn-primary btn-lg" id="runBtn" {% if not configured %}disabled{% endif %}>Run autonomous agent</button>
+      <button class="btn btn-outline-secondary mt-2" id="dryBtn" {% if not configured %}disabled{% endif %}>Run research-only demo</button>
+    </div>
+  </section>
+
+  <section class="flow">
+    <div class="flow-step"><b>01 · OBSERVE</b>Account, clock, SPY and option chain via MCP</div>
+    <div class="flow-step"><b>02 · REASON</b>Claude or OpenAI returns one typed proposal</div>
+    <div class="flow-step"><b>03 · VETO</b>Ten deterministic gates distrust the model</div>
+    <div class="flow-step"><b>04 · EXECUTE</b>Idempotent paper limit order—or a clean skip</div>
+  </section>
+
+  <div id="notice" class="alert alert-info" hidden></div>
+  <section class="row g-3 mt-1">
+    <div class="col-lg-7"><div class="card p-4 h-100"><h3>Latest decision</h3><div id="decision" class="muted">No run loaded yet.</div></div></div>
+    <div class="col-lg-5"><div class="card p-4 h-100"><h3>Risk gate</h3><div id="gates" class="muted">Waiting for a proposal.</div></div></div>
+  </section>
+  <section class="card p-4 mt-3"><h3>MCP trace</h3><div id="trace" class="muted">No tools called yet.</div></section>
+  <section class="card p-4 mt-3"><h3>Audit record</h3><div id="audit" class="json">No run loaded yet.</div></section>
+</main>
+{% endblock %}
+{% block scripts %}
+<script>
+const $=id=>document.getElementById(id), esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function render(run){
+  if(!run)return;
+  const p=run.proposal||{}, r=run.risk||{}, status=run.status||'unknown';
+  $('decision').innerHTML=`<div class="d-flex justify-content-between align-items-center mb-3"><span class="badge ${status==='submitted'?'bg-success':status==='error'?'bg-danger':'bg-secondary'}">${esc(status.toUpperCase())}</span><span class="muted">${esc(run.provider||'')}</span></div>
+    <h2>${esc(p.action||'NO DECISION')} ${p.option_symbol?'· '+esc(p.option_symbol):''}</h2><p>${esc(p.thesis||run.error||'No thesis returned.')}</p>
+    <div class="row"><div class="col"><span class="muted small">LIMIT</span><div class="metric">${p.limit_price?'$'+Number(p.limit_price).toFixed(2):'—'}</div></div><div class="col"><span class="muted small">CONFIDENCE</span><div class="metric">${p.confidence?Math.round(p.confidence*100)+'%':'—'}</div></div><div class="col"><span class="muted small">MAX LOSS</span><div class="metric">${r.max_loss_dollars!=null?'$'+Number(r.max_loss_dollars).toFixed(0):'—'}</div></div></div>`;
+  $('gates').innerHTML=(r.checks||[]).map(g=>`<div class="gate"><span class="gate-icon ${g.passed?'':'fail'}">${g.passed?'✓':'×'}</span><div><b>${esc(g.name)}</b><div class="muted small">${esc(g.detail)}</div></div></div>`).join('')||'No gates evaluated.';
+  $('trace').innerHTML=(run.trace||[]).map(t=>`<span class="trace-pill">${t.ok?'✓':'×'} ${esc(t.tool)}</span>`).join('')||'No tools called.';
+  $('audit').textContent=JSON.stringify(run,null,2);
+}
+async function latest(){try{const d=await fetch('/agent/api/runs').then(r=>r.json());render((d.runs||[])[0]);}catch(e){}}
+async function run(dry){
+  $('runBtn').disabled=$('dryBtn').disabled=true;$('notice').hidden=false;$('notice').textContent='Agent is researching the live paper market. This can take up to a minute…';
+  try{const token=$('runToken').value;const res=await fetch('/agent/api/run',{method:'POST',headers:{'Content-Type':'application/json','X-Agent-Token':token},body:JSON.stringify({dry_run:dry})});const d=await res.json();render(d);$('notice').className=`alert ${res.ok?'alert-success':'alert-danger'}`;$('notice').textContent=res.ok?`Run finished: ${d.status}`:(d.error||'Run failed');}
+  catch(e){$('notice').className='alert alert-danger';$('notice').textContent=e.message;}
+  $('runBtn').disabled=$('dryBtn').disabled=false;
+}
+$('runBtn').onclick=()=>run(false);$('dryBtn').onclick=()=>run(true);latest();
+</script>
+{% endblock %}

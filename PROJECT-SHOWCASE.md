@@ -23,7 +23,7 @@ The separately verified local project-tools workspace is distinct from the publi
 
 ## Explore or discuss the work
 
-Inspect the linked source and documented project scope. For cleanup inquiries, describe the goal, approximate row count, headers, and deadline through the channel where this showcase was shared. Keep personal records out of public comments. Agree a private delivery channel before sharing a real file.
+Inspect the linked source and documented project scope. For cleanup inquiries, [open the launch and inquiry thread](https://github.com/adigp4-alt/drrrd/issues/32) and comment with your approximate row count, column headers, and desired output. GitHub sign-in is required and comments are public. Keep personal records out of comments and agree a private delivery channel before sharing a source CSV. Checkout is pending; a comment is an inquiry, not an order.
 
 This is a software portfolio. It makes no claim of previous clients, earnings, investment returns, predictive accuracy, official upstream affiliation, or verified production deployment. Third-party projects retain their own attribution and licenses. Public visibility of a repository is not proof of an open-source license.
 

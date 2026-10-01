@@ -1,5 +1,7 @@
 # Iran Investment Tracker — Live Web Dashboard
 
+> **Free Contact CSV Cleaner preview:** Preserve your export, log exact duplicates, and review conflicting records. [Download the preview](https://practical-data-tools.pulsargeek.chatgpt.site/assets/contact-cleaner-preview.zip) · [Watch the 45-second overview](https://practical-data-tools.pulsargeek.chatgpt.site/assets/contact-cleanup-overview.mp4) · [See the proposed $49 cleanup scope](https://practical-data-tools.pulsargeek.chatgpt.site/#scope) · [Read the product guide](https://github.com/adigp4-alt/drrrd/blob/claude/add-claude-documentation-StD8a/CONTACT-CSV-CLEANER.md). Fictional demonstration; inquiries do not place paid orders.
+
 > **Project showcase:** A Python/Flask research and dashboard project. Live deployment and predictive results are unverified. [Explore the source features, scope, and wider portfolio](./PROJECT-SHOWCASE.md).
 
 > **Contact CSV cleanup:** [Ask about fit — inquiry only](https://github.com/adigp4-alt/drrrd/issues/32) for the proposed $49 USD service. The app's `/contact-cleanup` page offers a [configurable payment handoff](./docs/contact-cleanup-checkout.md), disabled by default. No live checkout or payment is verified; inquiries do not place paid orders.

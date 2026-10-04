@@ -16,15 +16,17 @@ The preview includes the Python tool, sample data, documented cleanup rules, and
 
 ## Want a cleanup pass for your export?
 
-**Proposed service: $49 USD** for one compatible UTF-8, comma-delimited contact CSV, up to **2,000 records and 15 columns**.
+**Service: $49 USD** for one compatible UTF-8, comma-delimited contact CSV, up to **2,000 records and 15 columns**.
 
 You receive the preserved original, accepted CSV, duplicate log, review queue, and audit report. One revision within the agreed rules is included. The delivery target is **24 hours after scope agreement, a usable file, and payment confirmation**.
 
 The workflow requires six explicitly mapped fields: name, email, phone, company, city, and country. Additional columns are retained. Larger files, additional files, different matching rules, custom schemas, or unusually large review queues need a separate scope. The service does not include contact enrichment, scraping, mailbox-deliverability verification, or automatic fuzzy merging.
 
-**Checkout is pending. Inquiries are open; this post does not take an order or payment.**
+**[Email your scope inquiry](mailto:adigp4%2Bcsvcleanup@gmail.com)** with approximate row count, column names/schema, desired cleanup rules, and phone country context. Confirm the scope before sending the source CSV. Continue in the private email thread or an agreed restricted share link after agreement.
 
-**[Ask whether your file fits](https://github.com/adigp4-alt/drrrd/issues/32)** by commenting with only your **approximate row count and non-sensitive column names/schema**. GitHub sign-in is required and comments are public. Do not attach the source CSV or post personal contact records. After scope agreement, arrange a private channel for the source file.
+After scope agreement, the [service page](https://practical-data-tools.pulsargeek.chatgpt.site/#payment) has a **$49 USD PayPal request** to **Adiel Ramos (@AdielRamos115)**. Choose **Goods & Services**, include the agreed order reference, and review the recipient and amount. If that option is unavailable, stop and ask for an individual invoice. The seller checks the actual PayPal transaction before fulfillment; a screenshot, click, or return visit does not confirm payment. No completed payment or revenue has been verified.
+
+[GitHub scope inquiry](https://github.com/adigp4-alt/drrrd/issues/32) remains an alternative. GitHub sign-in is required and comments are public. Share only row count and schema there; do not post source files, contact records, or receipts.
 
 Start with the evidence: **[open the free preview](https://practical-data-tools.pulsargeek.chatgpt.site)**.
 

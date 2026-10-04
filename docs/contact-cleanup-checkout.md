@@ -1,6 +1,6 @@
 # Contact-cleanup payment handoff
 
-Related offer: [issue #32](https://github.com/adigp4-alt/drrrd/issues/32).
+Current offer: [Practical Data Tools](https://practical-data-tools.pulsargeek.chatgpt.site/#payment).
 
 ## Public status
 
@@ -9,13 +9,14 @@ and 15 columns**, with agreed rules, exact-duplicate handling, a review queue,
 an audit, and one revision within scope. Target delivery is 24 hours after the
 usable file, rules, and payment are confirmed.
 
-**Checkout is disabled by default. No live payment destination or completed
-payment has been verified for this change.** The test URL is a syntax-only
-fixture; tests never follow it or transact.
+**The local checkout redirect is disabled by default.** The page links to the
+current portfolio offer and its verified $49 PayPal destination instead. This
+does not confirm a completed payment. The test URL is a syntax-only fixture;
+tests never follow it or transact. Current payment options are maintained on the portfolio.
 
-- **Inquiry:** a public comment in issue #32 about scope. It creates no order
-  and collects no payment. Ask for row count, headers, desired output, and phone
-  country context; never request contact data or receipts in public comments.
+- **Inquiry:** email adigp4+csvcleanup@gmail.com about scope. It creates no order
+  and collects no payment. Start with row count, headers, desired output, and
+  phone country context; agree a private file-transfer channel before sharing records.
 - **Payment handoff:** after scope is agreed, the enabled button opens the
   operator's hosted payment page. This repository does not collect card details.
 - **Paid order:** requires successful payment confirmation from the provider
@@ -26,12 +27,14 @@ fixture; tests never follow it or transact.
 ## Repository-controlled entry point
 
 The Flask app serves `/contact-cleanup`, linked from its navigation. It always
-offers **Ask about fit — inquiry only**. When unavailable it shows a genuinely
-disabled **Payment unavailable** button. When enabled it shows **Continue to
-payment — $49 USD** and sends the visitor to `/contact-cleanup/checkout`.
+offers **Email about fit — inquiry only**. When the local redirect is disabled,
+it links to the canonical portfolio payment section as **View current offer and
+PayPal instructions — $49 USD**. This keeps the verified PayPal destination and
+payment instructions in one place. When enabled it shows **Continue to payment
+— $49 USD** and sends the visitor to `/contact-cleanup/checkout`.
 
 The checkout route rechecks configuration and returns either a `303` redirect
-to the configured destination or a `503` unavailable page with the inquiry link.
+to the configured destination or a `503` page with private inquiry and current-offer links.
 It does not accept a destination from request parameters. Both routes use
 `Cache-Control: no-store`; the service worker excludes the entire checkout path
 from offline caching. No success page, webhook, payment database, or provider

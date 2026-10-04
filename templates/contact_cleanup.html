@@ -46,11 +46,11 @@
       <h2 id="inquiry-title">1. Confirm the fit</h2>
       <p>Describe your approximate row count, column headers, desired output, and
         country context for phone formatting. Wait for scope confirmation before paying.</p>
-      <a class="action" href="{{ inquiry_url }}">Ask about fit — inquiry only</a>
-      <p class="note">GitHub sign-in required. Comments are public. Do not upload a
-        contact CSV or post names, email addresses, phone numbers, or credentials.
-        Use schema descriptions or fictional examples.</p>
-      <p><strong>A comment is an inquiry. It does not place an order or pay for anything.</strong></p>
+      <a class="action" href="{{ inquiry_url }}">Email about fit — inquiry only</a>
+      <p class="note">Email adigp4+csvcleanup@gmail.com with schema descriptions or
+        fictional examples first. Agree a private file-transfer channel before
+        sharing contact records. Never send credentials.</p>
+      <p><strong>An email is an inquiry. It does not place an order or pay for anything.</strong></p>
     </section>
 
     <section aria-labelledby="payment-title">
@@ -60,8 +60,10 @@
         scope is confirmed; check the service, seller, currency, and total on the payment page.</p>
       <a class="action" href="{{ url_for('contact_cleanup.checkout') }}" aria-describedby="checkout-status">Continue to payment — $49 USD</a>
       {% else %}
-      <p id="checkout-status"><strong>Checkout unavailable. Inquiries are open; paid orders are not being accepted through this page.</strong></p>
-      <button class="action" type="button" disabled aria-describedby="checkout-status">Payment unavailable</button>
+      <p id="checkout-status">Our current offer has the $49 USD PayPal payment
+        instructions. Confirm scope by email first, then review the seller,
+        amount, and payment instructions there.</p>
+      <a class="action" href="{{ current_offer_url }}" aria-describedby="checkout-status">View current offer and PayPal instructions — $49 USD</a>
       {% endif %}
       <p>Opening a payment link or returning to this page does not confirm payment.
         A paid order requires the payment provider's confirmation and the seller's

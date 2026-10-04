@@ -8,7 +8,7 @@ from flask import Blueprint, current_app, redirect, render_template
 
 bp = Blueprint("contact_cleanup", __name__, url_prefix="/contact-cleanup")
 
-INQUIRY_URL = "https://github.com/adigp4-alt/drrrd/issues/32"
+INQUIRY_URL = "mailto:adigp4%2Bcsvcleanup@gmail.com?subject=Contact%20CSV%20cleanup%20inquiry"
 PORTFOLIO_URL = "https://practical-data-tools.pulsargeek.chatgpt.site"
 
 
@@ -72,6 +72,7 @@ def service_page(destination=None):
         checkout_available=bool(destination),
         inquiry_url=INQUIRY_URL,
         portfolio_url=PORTFOLIO_URL,
+        current_offer_url=PORTFOLIO_URL + "/#payment",
     )
 
 

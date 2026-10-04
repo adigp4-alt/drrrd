@@ -35,10 +35,12 @@ class ContactCleanupTests(unittest.TestCase):
         page = self.client.get("/contact-cleanup")
         html = page.get_data(as_text=True)
         self.assertEqual(page.status_code, 200)
-        self.assertIn("Checkout unavailable", html)
-        self.assertIn('type="button" disabled', html)
+        self.assertIn("View current offer and PayPal instructions — $49 USD", html)
+        self.assertIn('href="https://practical-data-tools.pulsargeek.chatgpt.site/#payment"', html)
+        self.assertNotIn("Payment unavailable", html)
         self.assertNotIn('href="/contact-cleanup/checkout"', html)
-        self.assertIn('href="https://github.com/adigp4-alt/drrrd/issues/32"', html)
+        self.assertIn('href="mailto:adigp4%2Bcsvcleanup@gmail.com?subject=Contact%20CSV%20cleanup%20inquiry"', html)
+        self.assertNotIn("github.com/adigp4-alt/drrrd/issues", html)
         response = self.client.get("/contact-cleanup/checkout")
         self.assertEqual(response.status_code, 503)
         self.assertNotIn("Location", response.headers)
@@ -100,12 +102,12 @@ class ContactCleanupTests(unittest.TestCase):
                     "/contact-cleanup?paid=true&success=true&session_id=fake"
                     "&CONTACT_CLEANUP_CHECKOUT_ENABLED=true"
                 ).get_data(as_text=True)
-                self.assertIn("A comment is an inquiry.", html)
+                self.assertIn("An email is an inquiry.", html)
                 self.assertIn("does not confirm payment", html)
                 self.assertIn("payment provider's confirmation", html)
                 self.assertIn("Wait for scope confirmation before paying", html)
                 if not enabled:
-                    self.assertIn("Checkout unavailable", html)
+                    self.assertIn("View current offer and PayPal instructions — $49 USD", html)
 
     def test_no_local_payment_submission_or_success_endpoint(self):
         self.configure()

@@ -72,29 +72,14 @@ python -m flask --app 'app:create_app(start_background=False)' run
 Open `http://127.0.0.1:5000/contact-cleanup`. The app reads environment variables
 at startup; it does not load a `.env` file automatically.
 
-## Portfolio integration and remaining activation
+## Public portfolio payment activation — October 4, 2026
 
-The separately maintained public portfolio at
-[practical-data-tools.pulsargeek.chatgpt.site](https://practical-data-tools.pulsargeek.chatgpt.site)
-now has the same disabled-by-default handoff on its own service section.
-PR #33 is merged. Portfolio version 3 was published successfully on October 1,
-2026; it does not require a separate Flask deployment.
+The separately maintained [public portfolio](https://practical-data-tools.pulsargeek.chatgpt.site/#payment) now has its own enabled PayPal request. This does not enable this Flask repository's separate routes.
 
-The portfolio uses public `dist/checkout-config.json` settings: `payment_url`
-is empty and `enabled` is false. Its payment button starts disabled, reads the
-configuration without browser caching, and rechecks it before every handoff.
-Missing/invalid configuration, failed requests, and recognizable Stripe sandbox
-links keep checkout unavailable. Its seven handoff tests passed before publishing.
-The Flask environment settings above still apply to deployments of this repo;
-they do not configure the separately hosted static portfolio.
+The account owner supplied Adiel Ramos, @AdielRamos115. Read-only checks of https://paypal.me/AdielRamos115/49USD confirmed the matching active profile and rendered 49.00 USD amount. The portfolio uses that exact public URL with enabled set to true. No payment was attempted, and no completed transaction or revenue has been verified.
 
-**One remaining activation requirement:** provide and verify the seller's live
-hosted payment URL for the agreed $49 USD one-time service, set it in the
-portfolio's configuration, enable it, and republish. A connected live payment
-account can be used to create that link. Only a Stripe test sandbox was available
-during implementation, so no real destination was configured.
+Private scope inquiries and files after agreement use adigp4+csvcleanup@gmail.com, a supported plus address for the authenticated connected Gmail mailbox. Start with approximate row count, schema, desired cleanup rules, and phone country context. The seller supplies the agreed order reference before payment. Customer records and receipts do not belong in public GitHub comments.
 
-Public status remains **inquiries open; checkout unavailable**. The published
-portfolio is verified as deployed; neither live checkout nor a completed payment
-has been verified. Inquiry comments, clicks, and return visits remain distinct
-from provider-confirmed paid orders.
+Buyers choose Goods & Services, review Adiel Ramos (@AdielRamos115) and $49 USD, and include their agreed order reference. If that payment type is unavailable, stop and request an individual invoice. The seller verifies the actual provider record for completed status, recipient, amount/currency, commercial payment type, and order reference before delivery. There is no automatic payment confirmation or fulfillment.
+
+The portfolio reads checkout-config.json without browser caching and rechecks before every handoff. Missing/invalid configuration, failures, PayPal sandbox links, incorrect PayPal.Me amount/currency paths, and stale checks block payment. Ten handoff checks passed before this activation. To disable the portfolio's handoff, set its enabled switch false or clear its URL and republish; Flask environment variables do not configure that separate site.

@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Starting Soon</title>
+<!--
+  Full-screen "starting soon" card with a countdown.
+
+  Everything is configurable from the URL, so in OBS you can open the browser
+  source's properties and append options to the Local File path... or better,
+  untick "Local file" and paste the file:// URL with a query string:
+
+    file:///.../starting-soon.html?minutes=10&handle=yourname&title=Starting%20Soon
+
+  Options: minutes (default 10), title, subtitle, handle, accent, accent2
+-->
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --accent: #7c5cff;
+    --accent2: #22d3ee;
+    --ink: #f4f4f7;
+    --dim: rgba(244, 244, 247, 0.55);
+  }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #07070c;
+    color: var(--ink);
+    font-family: "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  }
+
+  /* Two slow-drifting colour blobs. Cheap to render, reads as motion on
+     stream without eating encoder bitrate the way video loops do. */
+  .blob {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(90px);
+    opacity: 0.5;
+  }
+  .blob.one {
+    width: 46vw; height: 46vw;
+    background: var(--accent);
+    top: -12vw; left: -8vw;
+    animation: drift-a 22s ease-in-out infinite alternate;
+  }
+  .blob.two {
+    width: 40vw; height: 40vw;
+    background: var(--accent2);
+    bottom: -14vw; right: -6vw;
+    animation: drift-b 27s ease-in-out infinite alternate;
+  }
+  @keyframes drift-a {
+    from { transform: translate3d(0, 0, 0) scale(1); }
+    to   { transform: translate3d(8vw, 6vw, 0) scale(1.15); }
+  }
+  @keyframes drift-b {
+    from { transform: translate3d(0, 0, 0) scale(1.1); }
+    to   { transform: translate3d(-7vw, -5vw, 0) scale(0.95); }
+  }
+
+  /* Faint grid so the flat areas have some texture. */
+  .grid {
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.045) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.045) 1px, transparent 1px);
+    background-size: 64px 64px;
+    mask-image: radial-gradient(ellipse at center, #000 20%, transparent 75%);
+    -webkit-mask-image: radial-gradient(ellipse at center, #000 20%, transparent 75%);
+  }
+
+  .vignette {
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at center, transparent 35%, rgba(0,0,0,0.75) 100%);
+  }
+
+  .stage {
+    position: relative;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    gap: 2.2vh;
+  }
+
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.7em;
+    font-size: 1.35vw;
+    letter-spacing: 0.42em;
+    text-transform: uppercase;
+    color: var(--dim);
+    padding: 0.7em 1.4em;
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 999px;
+    background: rgba(255,255,255,0.03);
+    backdrop-filter: blur(6px);
+  }
+  .dot {
+    width: 0.7em; height: 0.7em;
+    border-radius: 50%;
+    background: #ff4d6d;
+    box-shadow: 0 0 0 0 rgba(255, 77, 109, 0.7);
+    animation: pulse 1.8s ease-out infinite;
+  }
+  @keyframes pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(255, 77, 109, 0.65); }
+    70%  { box-shadow: 0 0 0 1.1em rgba(255, 77, 109, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(255, 77, 109, 0); }
+  }
+
+  h1 {
+    font-size: 7.6vw;
+    font-weight: 800;
+    letter-spacing: -0.035em;
+    line-height: 0.95;
+    background: linear-gradient(100deg, var(--ink) 20%, var(--accent2) 55%, var(--accent) 90%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .subtitle {
+    font-size: 1.7vw;
+    color: var(--dim);
+    max-width: 46ch;
+    line-height: 1.5;
+  }
+
+  .clock {
+    margin-top: 1.4vh;
+    font-variant-numeric: tabular-nums;
+    font-size: 5.6vw;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    padding: 0.25em 0.85em;
+    border-radius: 0.28em;
+    border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(10, 10, 18, 0.5);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 24px 70px rgba(0,0,0,0.55);
+  }
+  .clock.done {
+    color: var(--accent2);
+    animation: breathe 2s ease-in-out infinite;
+  }
+  @keyframes breathe {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.55; }
+  }
+
+  .handle {
+    position: absolute;
+    bottom: 4.5vh;
+    font-size: 1.5vw;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: var(--dim);
+  }
+
+  .bar {
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    height: 6px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2), var(--accent));
+    background-size: 200% 100%;
+    animation: slide 8s linear infinite;
+  }
+  @keyframes slide {
+    from { background-position: 0% 0; }
+    to   { background-position: 200% 0; }
+  }
+</style>
+</head>
+<body>
+  <div class="blob one"></div>
+  <div class="blob two"></div>
+  <div class="grid"></div>
+  <div class="vignette"></div>
+
+  <div class="stage">
+    <div class="eyebrow"><span class="dot"></span><span id="eyebrow">Stream starts in</span></div>
+    <h1 id="title">Starting Soon</h1>
+    <p class="subtitle" id="subtitle">Grab a drink, say hi in chat, we go live in a moment.</p>
+    <div class="clock" id="clock">10:00</div>
+    <div class="handle" id="handle"></div>
+  </div>
+  <div class="bar"></div>
+
+<script>
+(function () {
+  var params = new URLSearchParams(location.search);
+
+  function set(id, value) {
+    if (value) { document.getElementById(id).textContent = value; }
+  }
+
+  if (params.get('accent')) {
+    document.documentElement.style.setProperty('--accent', params.get('accent'));
+  }
+  if (params.get('accent2')) {
+    document.documentElement.style.setProperty('--accent2', params.get('accent2'));
+  }
+
+  set('title', params.get('title'));
+  set('subtitle', params.get('subtitle'));
+  set('handle', params.get('handle'));
+
+  var minutes = parseFloat(params.get('minutes'));
+  if (!isFinite(minutes) || minutes < 0) { minutes = 10; }
+
+  var clock = document.getElementById('clock');
+  var eyebrow = document.getElementById('eyebrow');
+  // Anchor to a fixed end time rather than decrementing a counter, so the
+  // countdown stays honest even if the browser source throttles a frame.
+  var endsAt = Date.now() + minutes * 60 * 1000;
+
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+
+  function tick() {
+    var left = Math.max(0, Math.round((endsAt - Date.now()) / 1000));
+    var h = Math.floor(left / 3600);
+    var m = Math.floor((left % 3600) / 60);
+    var s = left % 60;
+    clock.textContent = h > 0 ? (h + ':' + pad(m) + ':' + pad(s)) : (pad(m) + ':' + pad(s));
+
+    if (left === 0 && !clock.classList.contains('done')) {
+      clock.classList.add('done');
+      clock.textContent = 'ANY SECOND NOW';
+      eyebrow.textContent = 'Here we go';
+    }
+  }
+
+  tick();
+  setInterval(tick, 250);
+})();
+</script>
+</body>
+</html>
